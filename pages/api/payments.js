@@ -2,7 +2,7 @@ import { Client } from "@notionhq/client";
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 
-const PAYMENT_DB_ID = "f751f699-849a-4885-96c5-2e327621a180";
+const PAYMENT_DB_ID = "53e312183ab2425dbebf9cb41a4b6928";
 
 export default async function handler(req, res) {
   try {
