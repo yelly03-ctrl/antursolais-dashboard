@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 export default function Dashboard() {
   const [items, setItems] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [todayData, setTodayData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -23,10 +24,12 @@ export default function Dashboard() {
     Promise.all([
       fetch("/api/payments").then(r => r.json()),
       fetch("/api/projects").then(r => r.json()),
-    ]).then(([payData, projData]) => {
+      fetch("/api/today").then(r => r.json()),
+    ]).then(([payData, projData, todayRes]) => {
       if (payData.error) setError(payData.error);
       else { setItems(payData.items || []); setError(null); }
       setProjects(projData.items || []);
+      if (todayRes && !todayRes.error) setTodayData(todayRes);
       setLoading(false);
     }).catch(err => { setError(err.message); setLoading(false); });
   };
@@ -214,6 +217,61 @@ export default function Dashboard() {
     </div>
   );
 
+  const renderHeroToday = () => {
+    if (!todayData) return null;
+    const { payments, tasks, deadlines } = todayData;
+    const totalCount = payments.length + tasks.length + deadlines.length;
+    return (
+      <section style={s.heroToday}>
+        <div style={s.heroHeader}>
+          <div>
+            <div style={s.heroTitle}>🔥 오늘 — {todayStr}</div>
+            <div style={s.heroSubtitle}>{totalCount === 0 ? "오늘 할 일이 없어요. 내일 일정 미리 점검하시죠." : `처리할 항목 ${totalCount}건`}</div>
+          </div>
+          <div style={s.heroDday}>D-{missionDDay} · 6/15 미션 4.5억</div>
+        </div>
+        <div style={s.heroGrid}>
+          <div style={s.heroCol}>
+            <div style={s.heroColTitle}>💰 오늘 결제 ({payments.length})</div>
+            {payments.length === 0 ? <div style={s.heroEmpty}>없음</div> : payments.map(p => (
+              <div key={p.id} style={s.heroItem}>
+                <div style={s.heroItemRow}>
+                  <span style={{ ...s.heroAmt, color: p.type === "입금" ? "#bbf7d0" : "#fecaca" }}>{p.type === "입금" ? "+" : "−"}{fmtAmount(p.amount)}</span>
+                  <span style={s.heroItemTitle}>{p.title}</span>
+                </div>
+                {p.vendor && <div style={s.heroSub}>{p.vendor}</div>}
+              </div>
+            ))}
+          </div>
+          <div style={s.heroCol}>
+            <div style={s.heroColTitle}>✅ 오늘 할 일 ({tasks.length})</div>
+            {tasks.length === 0 ? <div style={s.heroEmpty}>없음</div> : tasks.map(t => (
+              <div key={t.id} style={s.heroItem}>
+                <div style={s.heroItemRow}>
+                  {t.priority && <span style={s.heroPriority}>{t.priority}</span>}
+                  <span style={s.heroItemTitle}>{t.title}</span>
+                </div>
+                {t.category && <div style={s.heroSub}>{t.category}</div>}
+              </div>
+            ))}
+          </div>
+          <div style={s.heroCol}>
+            <div style={s.heroColTitle}>🚧 오늘 마감 업무 ({deadlines.length})</div>
+            {deadlines.length === 0 ? <div style={s.heroEmpty}>없음</div> : deadlines.map(d => (
+              <div key={d.id} style={s.heroItem}>
+                <div style={s.heroItemRow}>
+                  {d.priority && <span style={s.heroPriority}>{d.priority}</span>}
+                  <span style={s.heroItemTitle}>{d.title}</span>
+                </div>
+                {d.nextAction && <div style={s.heroSub}>→ {d.nextAction}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div style={s.container}>
       <div style={s.inner}>
@@ -233,6 +291,8 @@ export default function Dashboard() {
 
         {!loading && !error && (
           <>
+            {renderHeroToday()}
+
             <section style={s.missionCard}>
               <div style={s.missionTopRow}>
                 <div style={s.missionLeft}>
@@ -308,6 +368,16 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </section>
+
+                <section style={s.section}>
+                  <div style={s.sectionHeader}>
+                    <div style={s.sectionTitle}><span>🚧</span><span>진행 중인 업무</span><span style={s.sectionCount}>{projects.length}</span></div>
+                    <div style={s.sectionSummary}><span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>카드 클릭 → 업데이트</span></div>
+                  </div>
+                  <div style={s.projectGrid}>
+                    {projects.length === 0 ? (<div style={s.emptyState}>진행 중인 업무 없음</div>) : projects.map(renderProject)}
+                  </div>
+                </section>
               </div>
 
               <div style={s.colSide}>
@@ -317,16 +387,6 @@ export default function Dashboard() {
                 {renderSection("D-15 이내", next15Bucket, "📌")}
               </div>
             </div>
-
-            <section style={s.section}>
-              <div style={s.sectionHeader}>
-                <div style={s.sectionTitle}><span>🚧</span><span>진행 중인 업무</span><span style={s.sectionCount}>{projects.length}</span></div>
-                <div style={s.sectionSummary}><span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>카드 클릭 → 진행 사항 업데이트</span></div>
-              </div>
-              <div style={s.projectGrid}>
-                {projects.length === 0 ? (<div style={s.emptyState}>진행 중인 업무 없음</div>) : projects.map(renderProject)}
-              </div>
-            </section>
 
             <section style={s.section}>
               <div style={s.sectionHeader}>
@@ -437,6 +497,21 @@ const s = {
   searchBox: { position: "relative", minWidth: 320, flex: "0 1 400px" },
   searchInput: { width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #cbd5e1", fontSize: 14, backgroundColor: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
   searchCount: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 8px", borderRadius: 8, fontWeight: 600 },
+  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 16, padding: "18px 22px", marginBottom: 14, color: "#fff", boxShadow: "0 6px 20px rgba(220,38,38,0.25)" },
+  heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
+  heroTitle: { fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
+  heroSubtitle: { fontSize: 12, opacity: 0.9, fontWeight: 500 },
+  heroDday: { fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "5px 12px", borderRadius: 12, whiteSpace: "nowrap" },
+  heroGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 },
+  heroCol: { background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", minHeight: 100 },
+  heroColTitle: { fontSize: 12, fontWeight: 700, marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid rgba(255,255,255,0.15)", letterSpacing: "-0.01em" },
+  heroItem: { fontSize: 12, marginBottom: 8, lineHeight: 1.4 },
+  heroItemRow: { display: "flex", gap: 6, alignItems: "baseline" },
+  heroAmt: { fontWeight: 800, flexShrink: 0 },
+  heroPriority: { fontSize: 11, flexShrink: 0 },
+  heroItemTitle: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" },
+  heroSub: { fontSize: 11, opacity: 0.8, marginTop: 2, paddingLeft: 2 },
+  heroEmpty: { fontSize: 12, opacity: 0.6, textAlign: "center", padding: "16px 0", fontStyle: "italic" },
   missionCard: { background: "linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)", borderRadius: 14, padding: "18px 22px", marginBottom: 12, color: "#fff", boxShadow: "0 4px 14px rgba(59,130,246,0.25)" },
   missionTopRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 8 },
   missionLeft: { flex: 1, minWidth: 0 },
@@ -484,7 +559,7 @@ const s = {
   calendarEvents: { display: "flex", flexDirection: "column", gap: 2 },
   calendarEvent: { fontSize: 10, padding: "2px 5px", borderRadius: 4, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
   calendarMore: { fontSize: 10, color: "#94a3b8", fontWeight: 600, textAlign: "center", padding: "2px 0" },
-  projectGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, padding: "4px 0 8px" },
+  projectGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, padding: "4px 0 8px" },
   projectCard: { padding: "12px 12px", border: "1px solid #e2e8f0", borderRadius: 10, backgroundColor: "#fff", cursor: "pointer", transition: "all 0.15s ease" },
   projectHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 },
   projectTitle: { fontSize: 13, fontWeight: 700, color: "#0f172a", lineHeight: 1.3, flex: 1 },
