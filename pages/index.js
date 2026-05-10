@@ -59,7 +59,7 @@ export default function Dashboard() {
       const res = await fetch("/api/work-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: logTitle, content: logContent }) });
       const d = await res.json();
       if (d.error) setLogFeedback("❌ " + d.error);
-      else { setLogFeedback("✅ 노션 사령탑에 저장됐어요"); setLogTitle(""); setLogContent(""); setTimeout(() => setLogFeedback(""), 3000); }
+      else { setLogFeedback("✅ 노션 CEO SAAS에 저장됐어요"); setLogTitle(""); setLogContent(""); setTimeout(() => { setLogFeedback(""); setModal(null); }, 1500); }
     } catch (err) { setLogFeedback("❌ " + err.message); }
     finally { setLogSubmitting(false); }
   };
@@ -88,7 +88,7 @@ export default function Dashboard() {
   };
 
   const calcDDay = (dateStr) => { if (!dateStr) return null; const t = new Date(dateStr); t.setHours(0,0,0,0); return Math.round((t - today) / 86400000); };
-  const fmtAmount = (num) => { if (!num) return "0원"; if (num >= 100000000) return `${(num/100000000).toFixed(2)}억`; if (num >= 10000) return `${Math.round(num/10000).toLocaleString("ko-KR")}만`; return num.toLocaleString("ko-KR") + "원"; };
+  const fmtAmount = (num) => { if (!num) return "0"; if (num >= 100000000) return `${(num/100000000).toFixed(2)}억`; if (num >= 10000) return `${Math.round(num/10000).toLocaleString("ko-KR")}만`; return num.toLocaleString("ko-KR"); };
   const fmtDate = (dateStr) => { if (!dateStr) return ""; const d = new Date(dateStr); return `${d.getMonth()+1}/${d.getDate()}`; };
 
   const filteredItems = useMemo(() => {
@@ -111,7 +111,6 @@ export default function Dashboard() {
   const missionPct = Math.min((monthDep / missionTarget) * 100, 100);
 
   const bucket = (min, max) => filteredItems.filter(i => { const d = calcDDay(i.date); return d !== null && d >= min && d <= max; }).sort((a,b) => new Date(a.date) - new Date(b.date));
-  const todayBucket = bucket(0, 0);
   const tomorrowBucket = bucket(1, 1);
   const thisWeekBucket = bucket(2, 7);
   const next15Bucket = bucket(8, 15);
@@ -152,7 +151,8 @@ export default function Dashboard() {
     if (t.includes("임대료") || t.includes("관리비")) return "🏢";
     if (t.includes("급여") || t.includes("곽영") || t.includes("4대보험")) return "👤";
     if (t.includes("쿠콘") || t.includes("렌탈")) return "🖥️";
-    if (t.includes("텐밀리언") || t.includes("마케팅")) return "📊";
+    if (t.includes("텐밀리언") || t.includes("ppl") || t.includes("유튜")) return "🎬";
+    if (t.includes("마케팅")) return "📊";
     if (t.includes("lgu") || t.includes("인터넷")) return "📡";
     if (t.includes("cj") || t.includes("물류")) return "🚚";
     if (t.includes("나이스") || t.includes("세무")) return "🧾";
@@ -160,41 +160,47 @@ export default function Dashboard() {
     return "📌";
   };
 
-  const renderItem = (item) => {
+  const renderItemCompact = (item) => {
     const dday = calcDDay(item.date); const isIncome = item.type === "입금";
     const isDone = item.status === "완료"; const isUpdating = updatingItems.has(item.id);
     const ddayLabel = dday === 0 ? "오늘" : dday === 1 ? "내일" : `D-${dday}`;
-    const ddayColor = dday <= 1 ? "#ef4444" : dday <= 3 ? "#f59e0b" : "#64748b";
+    const ddayColor = dday <= 1 ? "#ef4444" : dday <= 3 ? "#f59e0b" : "#94a3b8";
     return (
-      <div key={item.id} style={{ ...s.item, borderLeft: `3px solid ${isIncome ? "#10b981" : "#ef4444"}`, opacity: isDone ? 0.45 : 1, backgroundColor: isDone ? "#f8fafc" : "transparent" }}>
+      <div key={item.id} style={{ ...s.itemCompact, borderLeft: `3px solid ${isIncome ? "#10b981" : "#ef4444"}`, opacity: isDone ? 0.4 : 1 }}>
         <input type="checkbox" checked={isDone} onChange={() => toggleComplete(item)} disabled={isUpdating} style={s.checkbox} />
-        <div style={s.itemIcon}>{iconFor(item)}</div>
-        <div style={s.itemMain}>
-          <div style={{ ...s.itemTitle, textDecoration: isDone ? "line-through" : "none", color: isDone ? "#94a3b8" : "#0f172a" }}>{item.title}</div>
-          <div style={s.itemMeta}>
-            <span style={{ ...s.itemDDay, color: ddayColor }}>{ddayLabel}</span>
-            <span style={s.itemDot}>·</span><span style={s.itemDate}>{fmtDate(item.date)}</span>
-            {item.vendor && (<><span style={s.itemDot}>·</span><span style={s.itemVendor}>{item.vendor}</span></>)}
+        <div style={s.itemCompactIcon}>{iconFor(item)}</div>
+        <div style={s.itemCompactMain}>
+          <div style={{ ...s.itemCompactTitle, textDecoration: isDone ? "line-through" : "none", color: isDone ? "#94a3b8" : "#0f172a" }}>{item.title}</div>
+          <div style={s.itemCompactMeta}>
+            <span style={{ color: ddayColor, fontWeight: 700 }}>{ddayLabel}</span>
+            <span style={s.itemDot}>·</span><span>{fmtDate(item.date)}</span>
+            {item.vendor && (<><span style={s.itemDot}>·</span><span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.vendor}</span></>)}
           </div>
         </div>
-        <div style={{ ...s.itemAmount, color: isDone ? "#94a3b8" : isIncome ? "#10b981" : "#ef4444", textDecoration: isDone ? "line-through" : "none" }}>
+        <div style={{ ...s.itemCompactAmount, color: isDone ? "#94a3b8" : isIncome ? "#10b981" : "#ef4444", textDecoration: isDone ? "line-through" : "none" }}>
           {isIncome ? "+" : "−"}{fmtAmount(item.amount)}
         </div>
       </div>
     );
   };
 
-  const renderSection = (title, list, emoji, alwaysShow = false) => {
-    if (list.length === 0 && !alwaysShow) return null;
+  const renderBucketBox = (title, list, emoji, accentColor) => {
     const dep = list.filter(i => i.type === "입금").reduce((sum,i) => sum + (i.amount||0), 0);
     const wd = list.filter(i => i.type === "출금").reduce((sum,i) => sum + (i.amount||0), 0);
     return (
-      <section style={s.section}>
-        <div style={s.sectionHeader}>
-          <div style={s.sectionTitle}><span>{emoji}</span><span>{title}</span>{list.length > 0 && <span style={s.sectionCount}>{list.length}</span>}</div>
-          <div style={s.sectionSummary}>{dep > 0 && <span style={s.sectionDep}>+{fmtAmount(dep)}</span>}{wd > 0 && <span style={s.sectionWd}>−{fmtAmount(wd)}</span>}</div>
+      <section style={s.bucketBox}>
+        <div style={s.bucketHeader}>
+          <div style={s.bucketTitle}>
+            <span style={{ ...s.bucketDot, backgroundColor: accentColor }} />
+            <span style={s.bucketTitleText}>{emoji} {title}</span>
+            <span style={s.bucketCount}>{list.length}</span>
+          </div>
+          <div style={s.bucketSummary}>
+            {dep > 0 && <span style={{ color: "#10b981", fontWeight: 700 }}>+{fmtAmount(dep)}</span>}
+            {wd > 0 && <span style={{ color: "#ef4444", fontWeight: 700 }}>−{fmtAmount(wd)}</span>}
+          </div>
         </div>
-        {list.length === 0 ? (<div style={s.emptyState}>일정 없음</div>) : (<div style={s.itemList}>{list.map(renderItem)}</div>)}
+        {list.length === 0 ? (<div style={s.bucketEmpty}>일정 없음</div>) : (<div style={s.bucketList}>{list.map(renderItemCompact)}</div>)}
       </section>
     );
   };
@@ -206,14 +212,13 @@ export default function Dashboard() {
     <div key={p.id} style={s.projectCard} onClick={() => { setModalData({ pageId: p.id, ...p }); setModal("edit-project"); }}>
       <div style={s.projectHeader}>
         <div style={s.projectTitle}>{p.title}</div>
-        <div style={s.projectPriority}>{p.priority}</div>
+        {p.priority && <div style={s.projectPriority}>{p.priority}</div>}
       </div>
       <div style={s.projectBadges}>
         <span style={{ ...s.projectBadge, backgroundColor: categoryColor[p.category] || "#64748b" }}>{p.category}</span>
         <span style={{ ...s.projectStatus, color: statusColor[p.status] || "#64748b", borderColor: statusColor[p.status] || "#64748b" }}>● {p.status}</span>
       </div>
-      {p.nextAction && <div style={s.projectNext}><strong>다음:</strong> {p.nextAction}</div>}
-      {p.vendor && <div style={s.projectVendor}>📍 {p.vendor}</div>}
+      {p.nextAction && <div style={s.projectNext}>→ {p.nextAction}</div>}
     </div>
   );
 
@@ -228,7 +233,7 @@ export default function Dashboard() {
             <div style={s.heroTitle}>🔥 오늘 — {todayStr}</div>
             <div style={s.heroSubtitle}>{totalCount === 0 ? "오늘 할 일이 없어요. 내일 일정 미리 점검하시죠." : `처리할 항목 ${totalCount}건`}</div>
           </div>
-          <div style={s.heroDday}>D-{missionDDay} · 6/15 미션 4.5억</div>
+          <div style={s.heroDday}>D-{missionDDay} · 6/15 미션 {missionPct.toFixed(0)}%</div>
         </div>
         <div style={s.heroGrid}>
           <div style={s.heroCol}>
@@ -271,18 +276,22 @@ export default function Dashboard() {
       </section>
     );
   };
-
-  return (
+             return (
     <div style={s.container}>
       <div style={s.inner}>
         <header style={s.topbar}>
-          <div>
-            <h1 style={s.title}>🎯 앙투어솔레 사령탑</h1>
+          <div style={s.topbarLeft}>
+            <h1 style={s.title}>🎯 앙투어솔레 CEO SAAS</h1>
             <div style={s.date}>{todayStr}</div>
           </div>
-          <div style={s.searchBox}>
-            <input type="text" placeholder="🔍 거래처, 제목, 카테고리 검색..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={s.searchInput} />
-            {searchQuery && <span style={s.searchCount}>{filteredItems.length}건</span>}
+          <div style={s.topbarRight}>
+            <div style={s.searchBox}>
+              <input type="text" placeholder="🔍 거래처·제목·카테고리..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={s.searchInput} />
+              {searchQuery && <span style={s.searchCount}>{filteredItems.length}건</span>}
+            </div>
+            <button style={s.iconBtn} onClick={() => setModal("memo")} title="빠른 메모">📝</button>
+            <button style={s.iconBtn} onClick={() => { setModalData({ date: today.toISOString().substring(0,10), title: "", amount: 0, type: "출금" }); setModal("add-payment"); }} title="새 일정 추가">➕</button>
+            <button style={s.iconBtn} onClick={fetchAll} title="새로고침">🔄</button>
           </div>
         </header>
 
@@ -291,53 +300,15 @@ export default function Dashboard() {
 
         {!loading && !error && (
           <>
-            {renderHeroToday()}
-
-            <section style={s.missionCard}>
-              <div style={s.missionTopRow}>
-                <div style={s.missionLeft}>
-                  <div style={s.missionLabel}>🎯 6/15 미션 — 4억 5천만원</div>
-                  <div style={s.progressBar}><div style={{ ...s.progressFill, width: `${missionPct}%` }} /></div>
-                </div>
-                <div style={s.missionRight}>
-                  <div style={s.missionPct}>{missionPct.toFixed(1)}%</div>
-                  <div style={s.missionDDay}>D-{missionDDay}</div>
-                </div>
+            <div style={s.row1}>
+              <div style={s.row1Left}>
+                {renderHeroToday()}
               </div>
-              <div style={s.missionStats}>
-                <span>{fmtAmount(monthDep)} 들어옴</span><span style={s.missionDot}>·</span><span>{fmtAmount(missionTarget - monthDep)} 남음</span>
-              </div>
-            </section>
-
-            <section style={s.statsRow5}>
-              <div style={{ ...s.statCard, borderTop: "3px solid #10b981" }}>
-                <div style={s.statLabel}>이번 달 입금</div>
-                <div style={{ ...s.statValue, color: "#10b981" }}>+{fmtAmount(monthDep)}</div>
-              </div>
-              <div style={{ ...s.statCard, borderTop: "3px solid #ef4444" }}>
-                <div style={s.statLabel}>이번 달 출금</div>
-                <div style={{ ...s.statValue, color: "#ef4444" }}>−{fmtAmount(monthWd)}</div>
-              </div>
-              <div style={{ ...s.statCard, borderTop: `3px solid ${monthNet >= 0 ? "#3b82f6" : "#f59e0b"}` }}>
-                <div style={s.statLabel}>순현금흐름</div>
-                <div style={{ ...s.statValue, color: monthNet >= 0 ? "#3b82f6" : "#f59e0b" }}>{monthNet >= 0 ? "+" : ""}{fmtAmount(monthNet)}</div>
-              </div>
-              <div style={{ ...s.statCard, borderTop: "3px solid #84cc16" }}>
-                <div style={s.statLabel}>이번 달 입금 예정</div>
-                <div style={{ ...s.statValue, color: "#84cc16" }}>+{fmtAmount(monthUpcomingDep)}</div>
-              </div>
-              <div style={{ ...s.statCard, borderTop: "3px solid #f97316" }}>
-                <div style={s.statLabel}>이번 달 출금 예정</div>
-                <div style={{ ...s.statValue, color: "#f97316" }}>−{fmtAmount(monthUpcomingWd)}</div>
-              </div>
-            </section>
-
-            <div style={s.gridMain}>
-              <div style={s.colCalendar}>
-                <section style={s.section}>
-                  <div style={s.sectionHeader}>
-                    <div style={s.sectionTitle}><span>📅</span><span>{calendar.monthName}</span></div>
-                    <div style={s.sectionSummary}><span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>날짜 클릭 → 일정 추가</span></div>
+              <div style={s.row1Right}>
+                <section style={s.calendarSection}>
+                  <div style={s.sectionHeaderSlim}>
+                    <div style={s.sectionTitleSmall}><span>📅</span><span>{calendar.monthName}</span></div>
+                    <span style={s.calendarHint}>날짜 클릭 → 일정 추가</span>
                   </div>
                   <div style={s.calendarBig}>
                     <div style={s.calendarHeader}>
@@ -355,7 +326,7 @@ export default function Dashboard() {
                                   const inc = ev.type === "입금"; const done = ev.status === "완료";
                                   return (
                                     <div key={ev.id} style={{ ...s.calendarEvent, backgroundColor: inc ? "#dcfce7" : "#fee2e2", color: inc ? "#166534" : "#991b1b", textDecoration: done ? "line-through" : "none", opacity: done ? 0.5 : 1 }} title={`${ev.title} · ${fmtAmount(ev.amount)}`}>
-                                      {inc ? "+" : "−"}{fmtAmount(ev.amount).replace("원", "")} {ev.title.slice(0, 8)}
+                                      {inc ? "+" : "−"}{fmtAmount(ev.amount)} {ev.title.slice(0, 7)}
                                     </div>
                                   );
                                 })}
@@ -368,48 +339,71 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </section>
-
-                <section style={s.section}>
-                  <div style={s.sectionHeader}>
-                    <div style={s.sectionTitle}><span>🚧</span><span>진행 중인 업무</span><span style={s.sectionCount}>{projects.length}</span></div>
-                    <div style={s.sectionSummary}><span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>카드 클릭 → 업데이트</span></div>
-                  </div>
-                  <div style={s.projectGrid}>
-                    {projects.length === 0 ? (<div style={s.emptyState}>진행 중인 업무 없음</div>) : projects.map(renderProject)}
-                  </div>
-                </section>
-              </div>
-
-              <div style={s.colSide}>
-                {renderSection("오늘", todayBucket, "🔥", true)}
-                {renderSection("내일", tomorrowBucket, "⏰", true)}
-                {renderSection("이번 주", thisWeekBucket, "📅")}
-                {renderSection("D-15 이내", next15Bucket, "📌")}
               </div>
             </div>
 
             <section style={s.section}>
-              <div style={s.sectionHeader}>
-                <div style={s.sectionTitle}><span>📝</span><span>빠른 메모 — 노션 사령탑에 자동 저장</span></div>
+              <div style={s.sectionHeaderSlim}>
+                <div style={s.sectionTitleSmall}><span>🚧</span><span>진행 중인 업무</span><span style={s.sectionCount}>{projects.length}</span></div>
+                <span style={s.calendarHint}>카드 클릭 → 업데이트</span>
               </div>
-              <div style={s.logFormRow}>
-                <input type="text" placeholder="제목 (선택)" value={logTitle} onChange={e => setLogTitle(e.target.value)} style={s.logInputRow} />
-                <textarea placeholder="미팅 내용·진행 사항·결정 사항·아이디어..." value={logContent} onChange={e => setLogContent(e.target.value)} style={s.logTextareaRow} rows={3} />
-                <button onClick={submitLog} disabled={logSubmitting || !logContent.trim()} style={{ ...s.logBtnRow, opacity: logSubmitting || !logContent.trim() ? 0.5 : 1 }}>
-                  {logSubmitting ? "저장 중..." : "📌 노션 기록"}
-                </button>
+              <div style={s.projectGridV6}>
+                {projects.length === 0 ? (<div style={s.emptyState}>진행 중인 업무 없음</div>) : projects.map(renderProject)}
               </div>
-              {logFeedback && <div style={s.logFeedback}>{logFeedback}</div>}
             </section>
 
+            <div style={s.row3}>
+              {renderBucketBox("내일", tomorrowBucket, "⏰", "#f59e0b")}
+              {renderBucketBox("이번 주", thisWeekBucket, "📅", "#3b82f6")}
+              {renderBucketBox("D-15 이내", next15Bucket, "📌", "#a855f7")}
+              <section style={s.bucketBox}>
+                <div style={s.bucketHeader}>
+                  <div style={s.bucketTitle}>
+                    <span style={{ ...s.bucketDot, backgroundColor: "#10b981" }} />
+                    <span style={s.bucketTitleText}>💰 이번 달 자금</span>
+                  </div>
+                </div>
+                <div style={s.fundList}>
+                  <div style={s.fundRow}>
+                    <span style={s.fundLabel}>입금</span>
+                    <span style={{ ...s.fundValue, color: "#10b981" }}>+{fmtAmount(monthDep)}</span>
+                  </div>
+                  <div style={s.fundRow}>
+                    <span style={s.fundLabel}>출금</span>
+                    <span style={{ ...s.fundValue, color: "#ef4444" }}>−{fmtAmount(monthWd)}</span>
+                  </div>
+                  <div style={s.fundDiv} />
+                  <div style={s.fundRow}>
+                    <span style={s.fundLabel}>순흐름</span>
+                    <span style={{ ...s.fundValue, color: monthNet >= 0 ? "#3b82f6" : "#f97316", fontSize: 16 }}>
+                      {monthNet >= 0 ? "+" : ""}{fmtAmount(monthNet)}
+                    </span>
+                  </div>
+                  <div style={s.fundDiv} />
+                  <div style={s.fundRow}>
+                    <span style={s.fundLabelSmall}>입금 예정</span>
+                    <span style={{ ...s.fundValueSmall, color: "#84cc16" }}>+{fmtAmount(monthUpcomingDep)}</span>
+                  </div>
+                  <div style={s.fundRow}>
+                    <span style={s.fundLabelSmall}>출금 예정</span>
+                    <span style={{ ...s.fundValueSmall, color: "#f97316" }}>−{fmtAmount(monthUpcomingWd)}</span>
+                  </div>
+                  <div style={s.fundMissionBar}>
+                    <div style={s.fundMissionLabel}>6/15 미션 {missionPct.toFixed(0)}% · {fmtAmount(missionTarget - monthDep)} 남음</div>
+                    <div style={s.fundMissionBarBg}>
+                      <div style={{ ...s.fundMissionBarFill, width: `${missionPct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
             <footer style={s.footer}>
-              📡 앙투어솔레 사령탑 · {new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 갱신{" · "}
-              <button onClick={fetchAll} style={s.refreshBtn}>🔄 새로고침</button>
+              📡 앙투어솔레 CEO SAAS · {new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 갱신
             </footer>
           </>
         )}
-
-        {modal === "add-payment" && (
+{modal === "add-payment" && (
           <div style={s.modalOverlay} onClick={() => setModal(null)}>
             <div style={s.modal} onClick={e => e.stopPropagation()}>
               <h2 style={s.modalTitle}>📅 새 일정 추가 — {modalData.date}</h2>
@@ -483,109 +477,139 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {modal === "memo" && (
+          <div style={s.modalOverlay} onClick={() => setModal(null)}>
+            <div style={s.modal} onClick={e => e.stopPropagation()}>
+              <h2 style={s.modalTitle}>📝 빠른 메모 — 노션 CEO SAAS에 저장</h2>
+              <div style={s.modalForm}>
+                <label style={s.modalLabel}>제목 (선택)</label>
+                <input type="text" placeholder="제목 (생략 가능)" value={logTitle} onChange={e => setLogTitle(e.target.value)} style={s.modalInput} />
+                <label style={s.modalLabel}>내용</label>
+                <textarea placeholder="미팅 내용·진행 사항·결정 사항·아이디어..." value={logContent} onChange={e => setLogContent(e.target.value)} style={{ ...s.modalInput, minHeight: 160, fontFamily: "inherit" }} autoFocus />
+                {logFeedback && <div style={s.logFeedback}>{logFeedback}</div>}
+              </div>
+              <div style={s.modalBtns}>
+                <button onClick={() => setModal(null)} style={s.modalBtnSecondary}>취소</button>
+                <button onClick={submitLog} disabled={logSubmitting || !logContent.trim()} style={{ ...s.modalBtnPrimary, opacity: logSubmitting || !logContent.trim() ? 0.5 : 1 }}>
+                  {logSubmitting ? "저장 중..." : "📌 노션 기록"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
 const s = {
-  container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 16 },
+  container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 12 },
   inner: { maxWidth: 1600, margin: "0 auto" },
-  topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, padding: "8px 12px", flexWrap: "wrap", gap: 12 },
-  title: { fontSize: 22, fontWeight: 800, margin: 0, color: "#0f172a", letterSpacing: "-0.02em" },
-  date: { fontSize: 13, color: "#64748b", marginTop: 2, fontWeight: 500 },
-  searchBox: { position: "relative", minWidth: 320, flex: "0 1 400px" },
-  searchInput: { width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #cbd5e1", fontSize: 14, backgroundColor: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
-  searchCount: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 8px", borderRadius: 8, fontWeight: 600 },
-  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 16, padding: "18px 22px", marginBottom: 14, color: "#fff", boxShadow: "0 6px 20px rgba(220,38,38,0.25)" },
-  heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
-  heroTitle: { fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
-  heroSubtitle: { fontSize: 12, opacity: 0.9, fontWeight: 500 },
-  heroDday: { fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "5px 12px", borderRadius: 12, whiteSpace: "nowrap" },
-  heroGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 },
-  heroCol: { background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", minHeight: 100 },
-  heroColTitle: { fontSize: 12, fontWeight: 700, marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid rgba(255,255,255,0.15)", letterSpacing: "-0.01em" },
-  heroItem: { fontSize: 12, marginBottom: 8, lineHeight: 1.4 },
-  heroItemRow: { display: "flex", gap: 6, alignItems: "baseline" },
-  heroAmt: { fontWeight: 800, flexShrink: 0 },
-  heroPriority: { fontSize: 11, flexShrink: 0 },
-  heroItemTitle: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" },
-  heroSub: { fontSize: 11, opacity: 0.8, marginTop: 2, paddingLeft: 2 },
-  heroEmpty: { fontSize: 12, opacity: 0.6, textAlign: "center", padding: "16px 0", fontStyle: "italic" },
-  missionCard: { background: "linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)", borderRadius: 14, padding: "18px 22px", marginBottom: 12, color: "#fff", boxShadow: "0 4px 14px rgba(59,130,246,0.25)" },
-  missionTopRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 8 },
-  missionLeft: { flex: 1, minWidth: 0 },
-  missionRight: { display: "flex", alignItems: "center", gap: 10, flexShrink: 0 },
-  missionLabel: { fontSize: 13, fontWeight: 700, marginBottom: 8, opacity: 0.95 },
-  progressBar: { height: 9, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 5, overflow: "hidden" },
-  progressFill: { height: "100%", backgroundColor: "#fff", transition: "width 0.5s ease", borderRadius: 5 },
-  missionPct: { fontSize: 22, fontWeight: 800 },
-  missionDDay: { fontSize: 13, fontWeight: 700, backgroundColor: "rgba(255,255,255,0.2)", padding: "4px 12px", borderRadius: 12 },
-  missionStats: { fontSize: 12, opacity: 0.9, fontWeight: 500, display: "flex", gap: 6 },
-  missionDot: { opacity: 0.5 },
-  statsRow5: { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 14 },
-  statCard: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 12px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", textAlign: "center" },
-  statLabel: { fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 6 },
-  statValue: { fontSize: 17, fontWeight: 800, letterSpacing: "-0.01em" },
-  gridMain: { display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr)", gap: 12, alignItems: "start", marginBottom: 12 },
-  colCalendar: { display: "flex", flexDirection: "column", gap: 12 },
-  colSide: { display: "flex", flexDirection: "column", gap: 12 },
-  section: { backgroundColor: "#fff", borderRadius: 14, padding: "14px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 12 },
-  sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid #f1f5f9" },
-  sectionTitle: { fontSize: 14, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 },
-  sectionCount: { fontSize: 11, fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 8px", borderRadius: 10 },
-  sectionSummary: { display: "flex", gap: 8, fontSize: 12, fontWeight: 700 },
-  sectionDep: { color: "#10b981" },
-  sectionWd: { color: "#ef4444" },
-  itemList: { display: "flex", flexDirection: "column" },
-  item: { display: "flex", alignItems: "center", gap: 8, padding: "8px 6px", borderBottom: "1px solid #f8fafc", transition: "all 0.2s ease" },
-  checkbox: { width: 16, height: 16, cursor: "pointer", accentColor: "#3b82f6", flexShrink: 0 },
-  itemIcon: { fontSize: 18, width: 24, flexShrink: 0, textAlign: "center" },
-  itemMain: { flex: 1, minWidth: 0 },
-  itemTitle: { fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 },
-  itemMeta: { fontSize: 11, color: "#64748b", display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" },
-  itemDDay: { fontWeight: 700 },
+
+  topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 8px", gap: 10 },
+  topbarLeft: { display: "flex", alignItems: "baseline", gap: 12, minWidth: 0 },
+  topbarRight: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
+  title: { fontSize: 18, fontWeight: 800, margin: 0, color: "#0f172a", letterSpacing: "-0.02em", whiteSpace: "nowrap" },
+  date: { fontSize: 12, color: "#64748b", fontWeight: 500, whiteSpace: "nowrap" },
+  searchBox: { position: "relative", width: 280 },
+  searchInput: { width: "100%", padding: "7px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, backgroundColor: "#fff", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
+  searchCount: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 6px", borderRadius: 6, fontWeight: 600 },
+  iconBtn: { width: 36, height: 36, borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", cursor: "pointer", fontSize: 16, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+
+  row1: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr)", gap: 10, marginBottom: 10, alignItems: "stretch" },
+  row1Left: { display: "flex", flexDirection: "column", minHeight: 0 },
+  row1Right: { display: "flex", flexDirection: "column", minHeight: 0 },
+
+  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 12, padding: "14px 16px", color: "#fff", boxShadow: "0 4px 14px rgba(220,38,38,0.2)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
+  heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
+  heroTitle: { fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
+  heroSubtitle: { fontSize: 11, opacity: 0.9, fontWeight: 500 },
+  heroDday: { fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "4px 10px", borderRadius: 10, whiteSpace: "nowrap" },
+  heroGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, flex: 1 },
+  heroCol: { background: "rgba(255,255,255,0.12)", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column" },
+  heroColTitle: { fontSize: 11, fontWeight: 700, marginBottom: 6, paddingBottom: 5, borderBottom: "1px solid rgba(255,255,255,0.15)", letterSpacing: "-0.01em" },
+  heroItem: { fontSize: 11, marginBottom: 6, lineHeight: 1.4 },
+  heroItemRow: { display: "flex", gap: 5, alignItems: "baseline" },
+  heroAmt: { fontWeight: 800, flexShrink: 0, fontSize: 11 },
+  heroPriority: { fontSize: 10, flexShrink: 0 },
+  heroItemTitle: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  heroSub: { fontSize: 10, opacity: 0.8, marginTop: 1, paddingLeft: 2 },
+  heroEmpty: { fontSize: 11, opacity: 0.6, textAlign: "center", padding: "12px 0", fontStyle: "italic" },
+
+  calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
+  calendarBig: { padding: "2px 0", flex: 1, display: "flex", flexDirection: "column" },
+  calendarHeader: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 },
+  calendarDay: { fontSize: 10, fontWeight: 700, color: "#64748b", textAlign: "center", padding: 3 },
+  calendarGridBig: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, flex: 1, gridAutoRows: "1fr" },
+  calendarCellBig: { minHeight: 78, padding: "4px 5px", border: "1px solid #f1f5f9", borderRadius: 6, fontSize: 11, display: "flex", flexDirection: "column", gap: 2, transition: "all 0.15s ease", overflow: "hidden" },
+  calendarDayNum: { fontSize: 11, fontWeight: 600, marginBottom: 1 },
+  calendarEvents: { display: "flex", flexDirection: "column", gap: 1.5 },
+  calendarEvent: { fontSize: 9, padding: "1px 4px", borderRadius: 3, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
+  calendarMore: { fontSize: 9, color: "#94a3b8", fontWeight: 600, textAlign: "center", padding: "1px 0" },
+  calendarHint: { fontSize: 10, color: "#94a3b8", fontWeight: 500 },
+
+  section: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 10 },
+  sectionHeaderSlim: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #f1f5f9" },
+  sectionTitleSmall: { fontSize: 13, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 },
+  sectionCount: { fontSize: 10, fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "1px 7px", borderRadius: 8 },
+
+  projectGridV6: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: "2px 0 4px" },
+  projectCard: { padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, backgroundColor: "#fff", cursor: "pointer", transition: "all 0.15s ease" },
+  projectHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6 },
+  projectTitle: { fontSize: 12, fontWeight: 700, color: "#0f172a", lineHeight: 1.3, flex: 1 },
+  projectPriority: { fontSize: 10, fontWeight: 700, flexShrink: 0 },
+  projectBadges: { display: "flex", gap: 5, marginBottom: 6, flexWrap: "wrap" },
+  projectBadge: { fontSize: 9, fontWeight: 700, color: "#fff", padding: "2px 7px", borderRadius: 9 },
+  projectStatus: { fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 9, border: "1px solid", backgroundColor: "#fff" },
+  projectNext: { fontSize: 11, color: "#475569", lineHeight: 1.4 },
+
+  row3: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10, alignItems: "stretch" },
+  bucketBox: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 12px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", minHeight: 0 },
+  bucketHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, paddingBottom: 5, borderBottom: "1px solid #f1f5f9" },
+  bucketTitle: { fontSize: 12, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 5, minWidth: 0 },
+  bucketDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  bucketTitleText: { whiteSpace: "nowrap" },
+  bucketCount: { fontSize: 10, fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "1px 6px", borderRadius: 8 },
+  bucketSummary: { display: "flex", gap: 5, fontSize: 10, fontWeight: 700, flexShrink: 0 },
+  bucketList: { display: "flex", flexDirection: "column", flex: 1 },
+  bucketEmpty: { textAlign: "center", padding: "16px 4px", color: "#94a3b8", fontSize: 11, fontStyle: "italic" },
+
+  itemCompact: { display: "flex", alignItems: "center", gap: 6, padding: "5px 4px 5px 6px", borderBottom: "1px solid #f8fafc" },
+  checkbox: { width: 14, height: 14, cursor: "pointer", accentColor: "#3b82f6", flexShrink: 0 },
+  itemCompactIcon: { fontSize: 14, width: 18, flexShrink: 0, textAlign: "center" },
+  itemCompactMain: { flex: 1, minWidth: 0 },
+  itemCompactTitle: { fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
+  itemCompactMeta: { fontSize: 10, color: "#64748b", display: "flex", gap: 3, alignItems: "center", flexWrap: "nowrap", overflow: "hidden" },
   itemDot: { color: "#cbd5e1" },
-  itemDate: { color: "#94a3b8" },
-  itemVendor: { color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  itemAmount: { fontSize: 13, fontWeight: 700, flexShrink: 0, textAlign: "right", letterSpacing: "-0.01em" },
-  emptyState: { textAlign: "center", padding: "20px 8px", color: "#94a3b8", fontSize: 13 },
-  calendarBig: { padding: "4px 0" },
-  calendarHeader: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 },
-  calendarDay: { fontSize: 11, fontWeight: 700, color: "#64748b", textAlign: "center", padding: 4 },
-  calendarGridBig: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 },
-  calendarCellBig: { minHeight: 90, padding: "5px 6px", border: "1px solid #f1f5f9", borderRadius: 8, fontSize: 12, display: "flex", flexDirection: "column", gap: 3, transition: "all 0.15s ease" },
-  calendarDayNum: { fontSize: 13, fontWeight: 600, marginBottom: 2 },
-  calendarEvents: { display: "flex", flexDirection: "column", gap: 2 },
-  calendarEvent: { fontSize: 10, padding: "2px 5px", borderRadius: 4, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
-  calendarMore: { fontSize: 10, color: "#94a3b8", fontWeight: 600, textAlign: "center", padding: "2px 0" },
-  projectGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, padding: "4px 0 8px" },
-  projectCard: { padding: "12px 12px", border: "1px solid #e2e8f0", borderRadius: 10, backgroundColor: "#fff", cursor: "pointer", transition: "all 0.15s ease" },
-  projectHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 },
-  projectTitle: { fontSize: 13, fontWeight: 700, color: "#0f172a", lineHeight: 1.3, flex: 1 },
-  projectPriority: { fontSize: 11, fontWeight: 700, flexShrink: 0 },
-  projectBadges: { display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" },
-  projectBadge: { fontSize: 10, fontWeight: 700, color: "#fff", padding: "2px 8px", borderRadius: 10 },
-  projectStatus: { fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, border: "1px solid", backgroundColor: "#fff" },
-  projectNext: { fontSize: 11, color: "#475569", lineHeight: 1.4, marginBottom: 4 },
-  projectVendor: { fontSize: 11, color: "#94a3b8" },
-  logFormRow: { display: "grid", gridTemplateColumns: "200px 1fr 140px", gap: 8, padding: "4px 0 4px", alignItems: "stretch" },
-  logInputRow: { padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" },
-  logTextareaRow: { padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: 1.5, boxSizing: "border-box" },
-  logBtnRow: { padding: "10px 16px", borderRadius: 8, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
-  logFeedback: { fontSize: 12, color: "#64748b", textAlign: "center", padding: "6px 0" },
+  itemCompactAmount: { fontSize: 11, fontWeight: 700, flexShrink: 0, textAlign: "right", letterSpacing: "-0.01em" },
+
+  fundList: { display: "flex", flexDirection: "column", gap: 6, padding: "4px 0" },
+  fundRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline" },
+  fundLabel: { fontSize: 11, color: "#64748b", fontWeight: 600 },
+  fundValue: { fontSize: 13, fontWeight: 800, letterSpacing: "-0.01em" },
+  fundLabelSmall: { fontSize: 10, color: "#94a3b8", fontWeight: 500 },
+  fundValueSmall: { fontSize: 11, fontWeight: 700 },
+  fundDiv: { height: 1, backgroundColor: "#f1f5f9", margin: "2px 0" },
+  fundMissionBar: { marginTop: 6, padding: "8px 10px", backgroundColor: "#eff6ff", borderRadius: 6, border: "1px solid #dbeafe" },
+  fundMissionLabel: { fontSize: 10, fontWeight: 700, color: "#1e40af", marginBottom: 5 },
+  fundMissionBarBg: { height: 6, backgroundColor: "#dbeafe", borderRadius: 3, overflow: "hidden" },
+  fundMissionBarFill: { height: "100%", background: "linear-gradient(90deg, #3b82f6 0%, #1e40af 100%)", borderRadius: 3, transition: "width 0.5s ease" },
+
+  emptyState: { textAlign: "center", padding: "16px 8px", color: "#94a3b8", fontSize: 12 },
+
   modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 },
   modal: { backgroundColor: "#fff", borderRadius: 16, padding: "24px 24px 20px", width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" },
-  modalTitle: { fontSize: 18, fontWeight: 800, margin: "0 0 16px", color: "#0f172a", letterSpacing: "-0.02em" },
+  modalTitle: { fontSize: 17, fontWeight: 800, margin: "0 0 16px", color: "#0f172a", letterSpacing: "-0.02em" },
   modalForm: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 },
   modalLabel: { fontSize: 12, fontWeight: 700, color: "#475569", marginTop: 8, marginBottom: 4 },
   modalInput: { padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", width: "100%" },
   modalLink: { fontSize: 12, color: "#3b82f6", marginTop: 12, textDecoration: "none", fontWeight: 600 },
   modalBtns: { display: "flex", gap: 8, justifyContent: "flex-end" },
-  modalBtnSecondary: { padding: "10px 18px", borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", color: "#475569", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
-  modalBtnPrimary: { padding: "10px 18px", borderRadius: 8, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+  modalBtnSecondary: { padding: "9px 16px", borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", color: "#475569", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+  modalBtnPrimary: { padding: "9px 16px", borderRadius: 8, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+
   loading: { textAlign: "center", padding: 60, color: "#64748b", fontSize: 14 },
   error: { backgroundColor: "#fee2e2", border: "1px solid #fca5a5", color: "#b91c1c", padding: 16, borderRadius: 10, marginBottom: 16, fontSize: 13 },
-  footer: { marginTop: 16, paddingTop: 12, textAlign: "center", color: "#94a3b8", fontSize: 11 },
-  refreshBtn: { background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 11, padding: 0, fontFamily: "inherit" },
+  logFeedback: { fontSize: 12, color: "#10b981", textAlign: "center", padding: "6px 0", fontWeight: 600 },
+  footer: { marginTop: 12, paddingTop: 10, textAlign: "center", color: "#94a3b8", fontSize: 10 },
 };
