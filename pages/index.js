@@ -22,14 +22,15 @@ export default function Dashboard() {
   const fetchAll = () => {
     setLoading(true);
     Promise.all([
-      fetch("/api/payments").then(r => r.json()),
-      fetch("/api/projects").then(r => r.json()),
-      fetch("/api/today").then(r => r.json()),
+      fetch("/api/payments").then(r => r.json()).catch(e => ({ error: e.message, items: [] })),
+      fetch("/api/projects").then(r => r.json()).catch(e => ({ error: e.message, items: [] })),
+      fetch("/api/today").then(r => r.json()).catch(e => ({ error: e.message })),
     ]).then(([payData, projData, todayRes]) => {
       if (payData.error) setError(payData.error);
       else { setItems(payData.items || []); setError(null); }
       setProjects(projData.items || []);
       if (todayRes && !todayRes.error) setTodayData(todayRes);
+      else setTodayData(null);
       setLoading(false);
     }).catch(err => { setError(err.message); setLoading(false); });
   };
@@ -222,16 +223,15 @@ export default function Dashboard() {
     </div>
   );
 
-  const renderHeroToday = () => {
-    if (!todayData) return null;
-    const { payments, tasks, deadlines } = todayData;
+ const safe = todayData || { payments: [], tasks: [], deadlines: [] };
+    const { payments, tasks, deadlines } = safe;
     const totalCount = payments.length + tasks.length + deadlines.length;
     return (
       <section style={s.heroToday}>
         <div style={s.heroHeader}>
           <div>
             <div style={s.heroTitle}>🔥 오늘 — {todayStr}</div>
-            <div style={s.heroSubtitle}>{totalCount === 0 ? "오늘 할 일이 없어요. 내일 일정 미리 점검하시죠." : `처리할 항목 ${totalCount}건`}</div>
+            <div style={s.heroSubtitle}>{totalCount === 0 ? "오늘 일정·할 일이 없어요. 캘린더에서 다음 일정 확인하세요." : `처리할 항목 ${totalCount}건`}</div>
           </div>
           <div style={s.heroDday}>D-{missionDDay} · 6/15 미션 {missionPct.toFixed(0)}%</div>
         </div>
