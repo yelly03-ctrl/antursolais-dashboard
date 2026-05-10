@@ -161,6 +161,7 @@ export default function Dashboard() {
     return "📌";
   };
 
+  // V6 — 압축형 항목 렌더 (한 줄에 빽빽이)
   const renderItemCompact = (item) => {
     const dday = calcDDay(item.date); const isIncome = item.type === "입금";
     const isDone = item.status === "완료"; const isUpdating = updatingItems.has(item.id);
@@ -223,7 +224,8 @@ export default function Dashboard() {
     </div>
   );
 
- const safe = todayData || { payments: [], tasks: [], deadlines: [] };
+  const renderHeroToday = () => {
+    const safe = todayData || { payments: [], tasks: [], deadlines: [] };
     const { payments, tasks, deadlines } = safe;
     const totalCount = payments.length + tasks.length + deadlines.length;
     return (
@@ -276,9 +278,13 @@ export default function Dashboard() {
       </section>
     );
   };
-             return (
+
+  return (
     <div style={s.container}>
       <div style={s.inner}>
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* 헤더 — 슬림 / 타이틀 + 검색 + 액션 버튼 한 줄                    */}
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <header style={s.topbar}>
           <div style={s.topbarLeft}>
             <h1 style={s.title}>🎯 앙투어솔레 CEO SAAS</h1>
@@ -300,6 +306,9 @@ export default function Dashboard() {
 
         {!loading && !error && (
           <>
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            {/* 1단 — 좌(🔥 오늘) / 우(📅 캘린더) 가로 분할                  */}
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             <div style={s.row1}>
               <div style={s.row1Left}>
                 {renderHeroToday()}
@@ -342,6 +351,9 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            {/* 2단 — 진행 중인 업무 (가로 전체 / 3열 압축)                  */}
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             <section style={s.section}>
               <div style={s.sectionHeaderSlim}>
                 <div style={s.sectionTitleSmall}><span>🚧</span><span>진행 중인 업무</span><span style={s.sectionCount}>{projects.length}</span></div>
@@ -352,6 +364,9 @@ export default function Dashboard() {
               </div>
             </section>
 
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            {/* 3단 — 4박스 가로 분할 (내일 · 이번주 · D-15 · 자금)           */}
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             <div style={s.row3}>
               {renderBucketBox("내일", tomorrowBucket, "⏰", "#f59e0b")}
               {renderBucketBox("이번 주", thisWeekBucket, "📅", "#3b82f6")}
@@ -403,7 +418,11 @@ export default function Dashboard() {
             </footer>
           </>
         )}
-{modal === "add-payment" && (
+
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* 모달 — 새 일정 / 업무 수정 / 빠른 메모                          */}
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {modal === "add-payment" && (
           <div style={s.modalOverlay} onClick={() => setModal(null)}>
             <div style={s.modal} onClick={e => e.stopPropagation()}>
               <h2 style={s.modalTitle}>📅 새 일정 추가 — {modalData.date}</h2>
@@ -502,10 +521,17 @@ export default function Dashboard() {
     </div>
   );
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// V6 스타일 — 인지과학 4단계 위계 / 노트북 가로 폭 활용 / 3색 시스템
+// 위계: 18(L1 타이틀) · 14(L2 섹션) · 12(L3 본문) · 10(L4 메타)
+// 색상: 빨강(위험·출금) / 초록(안전·입금) / 파랑(정보) / 회색(중립)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const s = {
   container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 12 },
   inner: { maxWidth: 1600, margin: "0 auto" },
 
+  // 헤더 — 슬림, 좌우 분리
   topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 8px", gap: 10 },
   topbarLeft: { display: "flex", alignItems: "baseline", gap: 12, minWidth: 0 },
   topbarRight: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
@@ -516,10 +542,12 @@ const s = {
   searchCount: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 6px", borderRadius: 6, fontWeight: 600 },
   iconBtn: { width: 36, height: 36, borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", cursor: "pointer", fontSize: 16, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
 
+  // 1단 — 좌(오늘) / 우(캘린더) 가로 분할
   row1: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr)", gap: 10, marginBottom: 10, alignItems: "stretch" },
   row1Left: { display: "flex", flexDirection: "column", minHeight: 0 },
   row1Right: { display: "flex", flexDirection: "column", minHeight: 0 },
 
+  // Hero 오늘 박스 — 본인이 가장 먼저 보는 곳, 색상 강도 최고
   heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 12, padding: "14px 16px", color: "#fff", boxShadow: "0 4px 14px rgba(220,38,38,0.2)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
   heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
   heroTitle: { fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
@@ -536,6 +564,7 @@ const s = {
   heroSub: { fontSize: 10, opacity: 0.8, marginTop: 1, paddingLeft: 2 },
   heroEmpty: { fontSize: 11, opacity: 0.6, textAlign: "center", padding: "12px 0", fontStyle: "italic" },
 
+  // 캘린더 — 한 눈에 5월 전체
   calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
   calendarBig: { padding: "2px 0", flex: 1, display: "flex", flexDirection: "column" },
   calendarHeader: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 },
@@ -548,11 +577,13 @@ const s = {
   calendarMore: { fontSize: 9, color: "#94a3b8", fontWeight: 600, textAlign: "center", padding: "1px 0" },
   calendarHint: { fontSize: 10, color: "#94a3b8", fontWeight: 500 },
 
+  // 공통 섹션 (진행 업무 등)
   section: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 10 },
   sectionHeaderSlim: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #f1f5f9" },
   sectionTitleSmall: { fontSize: 13, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 },
   sectionCount: { fontSize: 10, fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "1px 7px", borderRadius: 8 },
 
+  // 진행 업무 — 3열 그리드, 카드 컴팩트
   projectGridV6: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: "2px 0 4px" },
   projectCard: { padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, backgroundColor: "#fff", cursor: "pointer", transition: "all 0.15s ease" },
   projectHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6 },
@@ -563,6 +594,7 @@ const s = {
   projectStatus: { fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 9, border: "1px solid", backgroundColor: "#fff" },
   projectNext: { fontSize: 11, color: "#475569", lineHeight: 1.4 },
 
+  // 3단 — 4박스 가로 분할
   row3: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10, alignItems: "stretch" },
   bucketBox: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 12px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", minHeight: 0 },
   bucketHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, paddingBottom: 5, borderBottom: "1px solid #f1f5f9" },
@@ -574,6 +606,7 @@ const s = {
   bucketList: { display: "flex", flexDirection: "column", flex: 1 },
   bucketEmpty: { textAlign: "center", padding: "16px 4px", color: "#94a3b8", fontSize: 11, fontStyle: "italic" },
 
+  // 압축형 항목 (V6) — 한 줄에 빽빽이
   itemCompact: { display: "flex", alignItems: "center", gap: 6, padding: "5px 4px 5px 6px", borderBottom: "1px solid #f8fafc" },
   checkbox: { width: 14, height: 14, cursor: "pointer", accentColor: "#3b82f6", flexShrink: 0 },
   itemCompactIcon: { fontSize: 14, width: 18, flexShrink: 0, textAlign: "center" },
@@ -583,6 +616,7 @@ const s = {
   itemDot: { color: "#cbd5e1" },
   itemCompactAmount: { fontSize: 11, fontWeight: 700, flexShrink: 0, textAlign: "right", letterSpacing: "-0.01em" },
 
+  // 자금 박스 (3단 우측)
   fundList: { display: "flex", flexDirection: "column", gap: 6, padding: "4px 0" },
   fundRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline" },
   fundLabel: { fontSize: 11, color: "#64748b", fontWeight: 600 },
@@ -597,6 +631,7 @@ const s = {
 
   emptyState: { textAlign: "center", padding: "16px 8px", color: "#94a3b8", fontSize: 12 },
 
+  // 모달
   modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 },
   modal: { backgroundColor: "#fff", borderRadius: 16, padding: "24px 24px 20px", width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" },
   modalTitle: { fontSize: 17, fontWeight: 800, margin: "0 0 16px", color: "#0f172a", letterSpacing: "-0.02em" },
@@ -613,3 +648,4 @@ const s = {
   logFeedback: { fontSize: 12, color: "#10b981", textAlign: "center", padding: "6px 0", fontWeight: 600 },
   footer: { marginTop: 12, paddingTop: 10, textAlign: "center", color: "#94a3b8", fontSize: 10 },
 };
+
