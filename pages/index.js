@@ -287,7 +287,7 @@ export default function Dashboard() {
             {payments.length === 0 ? <div style={s.heroEmpty}>없음</div> : payments.map(p => (
               <div key={p.id} style={s.heroItem}>
                 <div style={s.heroItemRow}>
-                  <span style={{ ...s.heroAmt, color: p.type === "입금" ? "#bbf7d0" : "#fecaca" }}>
+                  <span style={{ ...s.heroAmt, color: p.type === "입금" ? "#16a34a" : "#dc2626" }}>
                     {p.type === "입금" ? "+" : "−"}{fmtAmount(p.amount)}
                   </span>
                   <span style={s.heroItemTitle}>{p.title}</span>
@@ -614,7 +614,7 @@ export default function Dashboard() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const s = {
   container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 16 },
-  inner: { maxWidth: 2400, margin: "0 auto" },
+  inner: { maxWidth: 1920, margin: "0 auto" },
  
   // 헤더 — 슬림, 좌우 분리
   topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 8px", gap: 10 },
@@ -633,34 +633,34 @@ const s = {
   row1Right: { display: "block", width: "100%", maxWidth: 1200, margin: "0 auto" },
  
   // Hero 오늘 박스 — 본인이 가장 먼저 보는 곳, 색상 강도 최고
-  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 12, padding: "14px 16px", color: "#fff", boxShadow: "0 4px 14px rgba(220,38,38,0.2)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
+  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 16, padding: "20px 22px", color: "#fff", boxShadow: "0 6px 20px rgba(220,38,38,0.25)", boxSizing: "border-box" },
   heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
   heroTitle: { fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
-  heroSubtitle: { fontSize: 11, opacity: 0.9, fontWeight: 500 },
+  heroSubtitle: { fontSize: 12, opacity: 0.95, fontWeight: 500, lineHeight: 1.5 },
   heroDday: { fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "4px 10px", borderRadius: 10, whiteSpace: "nowrap" },
-  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr)", gap: 12, flex: 1 },
-  heroCol: { background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", maxHeight: 620, overflowY: "auto" },
-  heroColTitle: { fontSize: 11, fontWeight: 700, marginBottom: 6, paddingBottom: 5, borderBottom: "1px solid rgba(255,255,255,0.15)", letterSpacing: "-0.01em" },
-  heroItem: { fontSize: 12, marginBottom: 8, lineHeight: 1.45, paddingBottom: 6, borderBottom: "1px solid rgba(255,255,255,0.06)" },
-  heroItemRow: { display: "flex", gap: 6, alignItems: "flex-start", flexWrap: "wrap" },
-  heroAmt: { fontWeight: 800, flexShrink: 0, fontSize: 12 },
+  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1.8fr) minmax(0, 1.1fr)", gap: 16, flex: 1 },
+  heroCol: { background: "#ffffff", borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", maxHeight: 720, overflowY: "auto", color: "#1f2937", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" },
+  heroColTitle: { fontSize: 13, fontWeight: 800, marginBottom: 12, paddingBottom: 10, borderBottom: "2px solid #f1f5f9", letterSpacing: "-0.01em", color: "#0f172a" },
+  heroItem: { fontSize: 12, marginBottom: 8, lineHeight: 1.5, padding: "10px 12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8 },
+  heroItemRow: { display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" },
+  heroAmt: { fontWeight: 800, flexShrink: 0, fontSize: 13 },
   heroPriority: { fontSize: 11, flexShrink: 0 },
-  heroItemTitle: { fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "keep-all" },
-  heroSub: { fontSize: 10, opacity: 0.8, marginTop: 1, paddingLeft: 2 },
-  heroEmpty: { fontSize: 11, opacity: 0.6, textAlign: "center", padding: "12px 0", fontStyle: "italic" },
+  heroItemTitle: { fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "keep-all", color: "#0f172a" },
+  heroSub: { fontSize: 11, color: "#64748b", marginTop: 4, fontWeight: 500 },
+  heroEmpty: { fontSize: 12, color: "#94a3b8", textAlign: "center", padding: "24px 0", fontStyle: "italic" },
  
   // V6.3 신규 — 카테고리 그룹핑 + 체크박스 + 칩 + 시간 배지
-  heroCategorySection: { marginBottom: 10 },
-  heroCategoryHeader: { fontSize: 10, fontWeight: 700, opacity: 0.85, marginBottom: 5, paddingBottom: 3, borderBottom: "1px solid rgba(255,255,255,0.1)", letterSpacing: "0.02em", textTransform: "none" },
-  heroTaskItem: { display: "flex", gap: 8, marginBottom: 7, alignItems: "flex-start", paddingBottom: 6, borderBottom: "1px solid rgba(255,255,255,0.05)" },
-  heroCheckbox: { width: 15, height: 15, cursor: "pointer", accentColor: "#ffffff", flexShrink: 0, marginTop: 2 },
+  heroCategorySection: { marginBottom: 14 },
+  heroCategoryHeader: { fontSize: 12, fontWeight: 800, color: "#1e293b", marginBottom: 8, padding: "7px 12px", background: "#f1f5f9", borderLeft: "4px solid #f97316", borderRadius: "4px 6px 6px 4px", letterSpacing: "-0.01em" },
+  heroTaskItem: { display: "flex", gap: 10, marginBottom: 6, alignItems: "flex-start", padding: "10px 12px", background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 8, transition: "all 0.15s ease" },
+  heroCheckbox: { width: 18, height: 18, cursor: "pointer", accentColor: "#dc2626", flexShrink: 0, marginTop: 1 },
   heroTaskBody: { flex: 1, minWidth: 0 },
   heroTaskTopRow: { display: "flex", gap: 5, alignItems: "baseline", flexWrap: "wrap", lineHeight: 1.4 },
-  heroTimeBadge: { fontSize: 9, fontWeight: 800, background: "rgba(255,255,255,0.28)", padding: "1.5px 6px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.02em" },
-  heroTaskTitle: { fontSize: 12, fontWeight: 600, wordBreak: "keep-all", flex: 1, minWidth: 0 },
-  heroChipRow: { display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" },
-  heroChip: { fontSize: 9, fontWeight: 700, color: "#fff", padding: "1.5px 6px", borderRadius: 4, letterSpacing: "0.01em", lineHeight: 1.2 },
-  heroSubMeta: { fontSize: 10, opacity: 0.7, marginTop: 3, fontStyle: "italic" },
+  heroTimeBadge: { fontSize: 10, fontWeight: 800, background: "#1e40af", color: "#fff", padding: "2px 8px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.02em" },
+  heroTaskTitle: { fontSize: 13, fontWeight: 600, wordBreak: "keep-all", flex: 1, minWidth: 0, color: "#0f172a", lineHeight: 1.4 },
+  heroChipRow: { display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" },
+  heroChip: { fontSize: 10, fontWeight: 700, color: "#fff", padding: "2.5px 8px", borderRadius: 4, letterSpacing: "0.01em", lineHeight: 1.3 },
+  heroSubMeta: { fontSize: 11, color: "#64748b", marginTop: 5, fontWeight: 500 },
  
   // 캘린더 — 한 눈에 5월 전체
   calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
@@ -746,4 +746,3 @@ const s = {
   logFeedback: { fontSize: 12, color: "#10b981", textAlign: "center", padding: "6px 0", fontWeight: 600 },
   footer: { marginTop: 12, paddingTop: 10, textAlign: "center", color: "#94a3b8", fontSize: 10 },
 };
- 
