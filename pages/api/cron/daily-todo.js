@@ -1,224 +1,222 @@
-// pages/api/cron/daily-todo.js
-// 매일 새벽 6시(KST) 자동 실행 - 오늘 할 일 자동 생성
-import { Client } from '@notionhq/client';
+import { Client } from "@notionhq/client";
  
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
  
-const PAYMENT_DB_ID  = '53e312183ab2425dbebf9cb41a4b6928';
-const PROGRESS_DB_ID = 'd6a2c6681ee349c0ba0a483391cab615';
-const TODO_DB_ID     = 'c709b76c63b94f03883f7051d089d343';
+const PAYMENT_DB_ID = "53e312183ab2425dbebf9cb41a4b6928";
+const PROGRESS_DB_ID = "d6a2c6681ee349c0ba0a483391cab615";
+const TODO_DB_ID = "c709b76c63b94f03883f7051d089d343";
  
-function kstDate(offsetDays = 0) {
+// V6.6: KST 기준 yyyy-mm-dd
+function kstDate(offset = 0) {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  kst.setDate(kst.getDate() + offsetDays);
-  return kst.toISOString().split('T')[0];
+  kst.setUTCDate(kst.getUTCDate() + offset);
+  return kst.toISOString().split("T")[0];
 }
  
-const CATEGORY_MAP = {
-  '해외 진출': '영업',
-  '국내 B2B':  '영업',
-  '매장':      '영업',
-  '신규 SKU':  '제품',
-  '공급사':    '거래처',
-  '운영':      '기타',
-  '기타':      '기타',
-};
- 
-function decidePriority(targetDate, today, tomorrow) {
-  if (targetDate <= today)     return '🔴 긴급';
-  if (targetDate === tomorrow) return '🟡 높음';
-  return '🟢 중간';
-}
- 
-function formatAmount(amount) {
-  if (!amount) return '';
+function fmtAmount(amount) {
+  if (!amount) return "";
+  const sign = amount >= 0 ? "+" : "-";
   const abs = Math.abs(amount);
-  if (abs >= 10000) {
-    return (amount / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 0 }) + '만';
-  }
-  return amount.toLocaleString('ko-KR');
+  if (abs >= 100000000) return sign + (abs / 100000000).toFixed(1) + "억";
+  if (abs >= 10000) return sign + (abs / 10000).toFixed(0) + "만";
+  return sign + abs.toLocaleString();
+}
+ 
+function getText(rt) {
+  if (!rt) return "";
+  if (Array.isArray(rt)) return rt.map(t => t.plain_text || "").join("");
+  return "";
 }
  
 export default async function handler(req, res) {
-  const auth = req.headers.authorization || '';
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
  
-  const today    = kstDate(0);
-  const tomorrow = kstDate(1);
-  const yesterday = kstDate(-1);
-  const dayAfter = kstDate(2);
- 
-  const candidates = [];
-  const log = { date: today, sources: {} };
- 
   try {
-    // [1] 결제 스케줄 DB
-    const payments = await notion.databases.query({
+    const today = kstDate(0);
+    const yesterday = kstDate(-1);
+ 
+    // ─────────────────────────────────────────────────────
+    // 1. 오늘 결제 (V6.6: "예정일" = 오늘만 / 상태 != 완료)
+    // ─────────────────────────────────────────────────────
+    const paymentsRes = await notion.databases.query({
       database_id: PAYMENT_DB_ID,
       filter: {
         and: [
-          { property: '예정일', date: { on_or_after: today } },
-          { property: '예정일', date: { on_or_before: dayAfter } },
-          { property: '상태',   select: { does_not_equal: '완료' } },
+          { property: "예정일", date: { equals: today } },
+          { property: "상태", select: { does_not_equal: "완료" } },
         ],
       },
     });
-    log.sources.payments = payments.results.length;
+    const payments = paymentsRes.results;
  
-    for (const page of payments.results) {
-      const p = page.properties;
-      const title   = p['제목']?.title?.[0]?.plain_text || '결제';
-      const amount  = p['원금액']?.number || 0;
-      const inOut   = p['입출 구분']?.select?.name || '';
-      const dueDate = p['예정일']?.date?.start || today;
-      const company = p['거래처']?.rich_text?.[0]?.plain_text || '';
-      const payType = p['결제 유형']?.select?.name || '';
- 
-      const icon = inOut === '출금' ? '💸' : '💰';
-      const sign = inOut === '출금' ? '-' : '+';
-      const amt  = amount ? ` ${sign}${formatAmount(amount)}` : '';
- 
-      candidates.push({
-        title: `${icon} ${title}${amt}`,
-        dueDate,
-        priority: decidePriority(dueDate, today, tomorrow),
-        category: '자금',
-        memo: `[결제 자동] ${payType}${company ? ` · ${company}` : ''}${inOut ? ` · ${inOut}` : ''}`.substring(0, 200),
-        relatedTo: company,
-      });
-    }
- 
-    // [2] 진행 중인 업무 DB
-    const progress = await notion.databases.query({
+    // ─────────────────────────────────────────────────────
+    // 2. 오늘 마감 진행 업무 (완료·보류 제외)
+    // ─────────────────────────────────────────────────────
+    const progressRes = await notion.databases.query({
       database_id: PROGRESS_DB_ID,
       filter: {
         and: [
-          { property: '마감일', date: { on_or_after: today } },
-          { property: '마감일', date: { on_or_before: dayAfter } },
-          { property: '상태',   select: { does_not_equal: '완료' } },
-          { property: '상태',   select: { does_not_equal: '보류' } },
+          { property: "마감일", date: { equals: today } },
+          { property: "상태", select: { does_not_equal: "완료" } },
+          { property: "상태", select: { does_not_equal: "보류" } },
         ],
       },
     });
-    log.sources.progress = progress.results.length;
+    const progress = progressRes.results;
  
-    for (const page of progress.results) {
-      const p = page.properties;
-      const title   = p['제목']?.title?.[0]?.plain_text || '업무';
-      const dueDate = p['마감일']?.date?.start || today;
-      const nextAct = p['다음 액션']?.rich_text?.[0]?.plain_text || '';
-      const cat     = p['카테고리']?.select?.name || '기타';
-      const region  = p['지역/거래처']?.rich_text?.[0]?.plain_text || '';
- 
-      candidates.push({
-        title: `🚧 ${title}`,
-        dueDate,
-        priority: decidePriority(dueDate, today, tomorrow),
-        category: CATEGORY_MAP[cat] || '기타',
-        memo: `[진행업무 자동] ${nextAct.substring(0, 180)}`,
-        relatedTo: region,
-      });
-    }
- 
-    // [3] 어제 미완료 항목 자동 이월
-    const carryover = await notion.databases.query({
+    // ─────────────────────────────────────────────────────
+    // 3. 어제 미완료 이월 (할 일 DB에서 어제 마감, 미완료)
+    // ─────────────────────────────────────────────────────
+    const carryoverRes = await notion.databases.query({
       database_id: TODO_DB_ID,
       filter: {
         and: [
-          { property: '마감일', date: { equals: yesterday } },
-          {
-            or: [
-              { property: '상태', select: { equals: '예정' } },
-              { property: '상태', select: { equals: '진행중' } },
-            ],
-          },
+          { property: "마감일", date: { equals: yesterday } },
+          { property: "상태", select: { does_not_equal: "완료" } },
         ],
       },
     });
-    log.sources.carryover = carryover.results.length;
+    const carryover = carryoverRes.results;
  
-    for (const page of carryover.results) {
-      const p = page.properties;
-      const title   = p['제목']?.title?.[0]?.plain_text || '이월';
-      const memo    = p['메모']?.rich_text?.[0]?.plain_text || '';
-      const related = p['관련 거래처']?.rich_text?.[0]?.plain_text || '';
-      const cat     = p['카테고리']?.select?.name || '기타';
- 
-      candidates.push({
-        title: `⏭️ ${title}`,
-        dueDate: today,
-        priority: '🔴 긴급',
-        category: cat,
-        memo: `[어제 이월] ${memo}`.substring(0, 200),
-        relatedTo: related,
-      });
-    }
- 
-    // [4] 중복 방지
-    const existing = await notion.databases.query({
+    // ─────────────────────────────────────────────────────
+    // 4. 오늘 이미 박힌 할 일 (V6.6: ID 기반 중복 검사)
+    // ─────────────────────────────────────────────────────
+    const existingRes = await notion.databases.query({
       database_id: TODO_DB_ID,
-      filter: { property: '마감일', date: { equals: today } },
+      filter: { property: "마감일", date: { equals: today } },
     });
-    const existingTitles = new Set(
-      existing.results.map((p) => {
-        const t = p.properties['제목']?.title?.[0]?.plain_text || '';
-        return t.replace(/^[\W_]+/, '').trim().substring(0, 50);
-      })
-    );
  
-    // [5] 할 일 DB에 박기
-    const created = [];
-    const skipped = [];
+    const existingPaymentIds = new Set();
+    const existingProgressIds = new Set();
+    const existingTitles = new Set();
+    existingRes.results.forEach(p => {
+      const title = getText(p.properties["제목"]?.title).trim();
+      if (title) existingTitles.add(title);
+      const memo = getText(p.properties["메모"]?.rich_text);
+      const pMatch = memo.match(/\[결제 ID: ([a-f0-9-]+)\]/);
+      if (pMatch) existingPaymentIds.add(pMatch[1]);
+      const gMatch = memo.match(/\[진행 ID: ([a-f0-9-]+)\]/);
+      if (gMatch) existingProgressIds.add(gMatch[1]);
+    });
  
-    for (const c of candidates) {
-      const key = c.title.replace(/^[\W_]+/, '').trim().substring(0, 50);
-      if (existingTitles.has(key)) {
-        skipped.push(c.title);
+    let created = 0, skipped = 0;
+    const createdTitles = [], skippedTitles = [];
+ 
+    // ─────────────────────────────────────────────────────
+    // 5. 결제 → 할 일 박기 (ID 매칭 / 제목 매칭 이중)
+    // ─────────────────────────────────────────────────────
+    for (const p of payments) {
+      if (existingPaymentIds.has(p.id)) {
+        skipped++;
+        skippedTitles.push(`[ID중복] ${getText(p.properties["제목"]?.title)}`);
+        continue;
+      }
+      const title = getText(p.properties["제목"]?.title);
+      const amount = p.properties["원금액"]?.number || 0;
+      const type = p.properties["입출 구분"]?.select?.name || "출금";
+      const vendor = getText(p.properties["거래처"]?.rich_text);
+      const signedAmount = type === "입금" ? amount : -amount;
+      const newTitle = `💰 ${title} ${fmtAmount(signedAmount)}`;
+ 
+      if (existingTitles.has(newTitle.trim())) {
+        skipped++;
+        skippedTitles.push(`[제목중복] ${newTitle}`);
         continue;
       }
  
-      try {
-        const newPage = await notion.pages.create({
-          parent: { database_id: TODO_DB_ID },
-          properties: {
-            '제목':     { title: [{ text: { content: c.title } }] },
-            '마감일':   { date: { start: c.dueDate } },
-            '우선순위': { select: { name: c.priority } },
-            '카테고리': { select: { name: c.category } },
-            '상태':     { select: { name: '예정' } },
-            ...(c.memo && {
-              '메모': { rich_text: [{ text: { content: c.memo } }] },
-            }),
-            ...(c.relatedTo && {
-              '관련 거래처': { rich_text: [{ text: { content: c.relatedTo } }] },
-            }),
-          },
-        });
-        created.push({ id: newPage.id, title: c.title });
-        existingTitles.add(key);
-      } catch (e) {
-        console.error('Failed:', c.title, e.message);
-      }
+      await notion.pages.create({
+        parent: { database_id: TODO_DB_ID },
+        properties: {
+          "제목": { title: [{ text: { content: newTitle } }] },
+          "마감일": { date: { start: today } },
+          "상태": { select: { name: "예정" } },
+          "우선순위": { select: { name: "🔴 긴급" } },
+          "카테고리": { select: { name: "자금" } },
+          "관련 거래처": { rich_text: [{ text: { content: vendor } }] },
+          "메모": { rich_text: [{ text: { content: `[결제 ID: ${p.id}] [결제 자동] ${vendor} · ${type}` } }] },
+        },
+      });
+      created++;
+      createdTitles.push(newTitle);
     }
  
-    log.created = created.length;
-    log.skipped = skipped.length;
-    log.candidates = candidates.length;
+    // ─────────────────────────────────────────────────────
+    // 6. 진행 업무 → 할 일 박기
+    // ─────────────────────────────────────────────────────
+    const catMap = { "해외 진출": "영업", "국내 B2B": "영업", "매장": "영업", "신규 SKU": "제품", "공급사": "거래처", "운영": "거래처", "기타": "기타" };
+    const prioMap = { "🔴 즉시": "🔴 긴급", "🟠 이번주": "🟡 높음", "🟡 이번달": "🟢 중간", "⚪ 추적": "🔵 낮음" };
+ 
+    for (const w of progress) {
+      if (existingProgressIds.has(w.id)) {
+        skipped++;
+        skippedTitles.push(`[ID중복] ${getText(w.properties["제목"]?.title)}`);
+        continue;
+      }
+      const title = getText(w.properties["제목"]?.title);
+      const nextAction = getText(w.properties["다음 액션"]?.rich_text);
+      const vendor = getText(w.properties["지역/거래처"]?.rich_text);
+      const category = w.properties["카테고리"]?.select?.name || "기타";
+      const priority = w.properties["우선순위"]?.select?.name || "🟡 이번달";
+      const newTitle = `🚧 ${title}`;
+ 
+      if (existingTitles.has(newTitle.trim())) {
+        skipped++;
+        skippedTitles.push(`[제목중복] ${newTitle}`);
+        continue;
+      }
+ 
+      await notion.pages.create({
+        parent: { database_id: TODO_DB_ID },
+        properties: {
+          "제목": { title: [{ text: { content: newTitle } }] },
+          "마감일": { date: { start: today } },
+          "상태": { select: { name: "예정" } },
+          "우선순위": { select: { name: prioMap[priority] || "🟢 중간" } },
+          "카테고리": { select: { name: catMap[category] || "기타" } },
+          "관련 거래처": { rich_text: [{ text: { content: vendor } }] },
+          "메모": { rich_text: [{ text: { content: `[진행 ID: ${w.id}] [진행업무 자동] D-Day${nextAction ? ' · ' + nextAction : ''}` } }] },
+        },
+      });
+      created++;
+      createdTitles.push(newTitle);
+    }
+ 
+    // ─────────────────────────────────────────────────────
+    // 7. 어제 미완료 이월 (V6.6: 새 페이지 안 만들고 마감일만 변경)
+    // ─────────────────────────────────────────────────────
+    for (const c of carryover) {
+      const title = getText(c.properties["제목"]?.title);
+      const existingMemo = getText(c.properties["메모"]?.rich_text);
+      const newMemo = existingMemo.includes("[어제 이월]")
+        ? existingMemo
+        : `[어제 이월] ${existingMemo}`.trim();
+ 
+      await notion.pages.update({
+        page_id: c.id,
+        properties: {
+          "마감일": { date: { start: today } },
+          "메모": { rich_text: [{ text: { content: newMemo } }] },
+        },
+      });
+      created++;
+      createdTitles.push(`[이월] ${title}`);
+    }
  
     return res.status(200).json({
       success: true,
-      ...log,
-      created_titles: created.map((c) => c.title),
-      skipped_titles: skipped,
+      version: "V6.6",
+      date: today,
+      sources: { payments: payments.length, progress: progress.length, carryover: carryover.length },
+      created,
+      skipped,
+      candidates: payments.length + progress.length + carryover.length,
+      created_titles: createdTitles.slice(0, 12),
+      skipped_titles: skippedTitles.slice(0, 12),
     });
-  } catch (error) {
-    console.error('Cron error:', error);
-    return res.status(500).json({
-      error: error.message,
-      stack: error.stack?.substring(0, 500),
-    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0, 6).join('\n') });
   }
 }
