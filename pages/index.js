@@ -142,6 +142,8 @@ export default function Dashboard() {
     for (let day = 1; day <= daysInMonth; day++) {
       cells.push({ day, events: eventsByDate[day] || [], isToday: day === today.getDate(), date: `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}` });
     }
+    // V6.7 — 6주 셀이 빈 NULL뿐이면 제거 (마지막 7개 모두 null 검사)
+    while (cells.length > 35 && cells.slice(-7).every(c => c === null)) cells.length -= 7;
     return { cells, monthName: today.toLocaleDateString("ko-KR", { year: "numeric", month: "long" }) };
   }, [items, today]);
  
@@ -306,6 +308,7 @@ export default function Dashboard() {
                   <div style={s.heroCategoryHeader}>
                     {categoryIcons[cat] || "📌"} {cat} ({tasksByCategory[cat].length})
                   </div>
+                  <div style={s.heroCategoryGrid}>
                   {tasksByCategory[cat].map(t => {
                     const isDone = t.status === "완료";
                     const isUpdating = updatingItems.has(t.id);
@@ -341,6 +344,7 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               ))
             }
@@ -628,20 +632,20 @@ const s = {
   iconBtn: { width: 36, height: 36, borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", cursor: "pointer", fontSize: 16, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
  
   // V6.5: 가로 분할 부활 — 좌(🔥 오늘 1.7fr) + 우(📅 캘린더 1fr)
-  row1: { display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1fr)", gap: 16, marginBottom: 14, alignItems: "stretch" },
+  row1: { display: "grid", gridTemplateColumns: "minmax(0, 2.2fr) minmax(0, 1fr)", gap: 14, marginBottom: 14, alignItems: "stretch" },
   row1Left: { display: "flex", flexDirection: "column", minHeight: 0 },
   row1Right: { display: "flex", flexDirection: "column", minHeight: 0 },
  
   // Hero 오늘 박스 — 본인이 가장 먼저 보는 곳, 색상 강도 최고
-  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 16, padding: "18px 20px", color: "#fff", boxShadow: "0 6px 20px rgba(220,38,38,0.25)", boxSizing: "border-box", height: "100%", display: "flex", flexDirection: "column" },
+  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 14, padding: "14px 16px", color: "#fff", boxShadow: "0 6px 20px rgba(220,38,38,0.25)", boxSizing: "border-box", height: "100%", display: "flex", flexDirection: "column" },
   heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
   heroTitle: { fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
   heroSubtitle: { fontSize: 12, opacity: 0.95, fontWeight: 500, lineHeight: 1.5 },
   heroDday: { fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "4px 10px", borderRadius: 10, whiteSpace: "nowrap" },
-  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr)", gap: 12, flex: 1 },
-  heroCol: { background: "#ffffff", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", overflowY: "auto", color: "#1f2937", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", minHeight: 0 },
-  heroColTitle: { fontSize: 12, fontWeight: 800, marginBottom: 10, paddingBottom: 8, borderBottom: "2px solid #f1f5f9", letterSpacing: "-0.01em", color: "#0f172a" },
-  heroItem: { fontSize: 12, marginBottom: 6, lineHeight: 1.5, padding: "8px 10px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 7 },
+  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 0.85fr) minmax(0, 2fr) minmax(0, 0.85fr)", gap: 10, flex: 1 },
+  heroCol: { background: "#ffffff", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", color: "#1f2937", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", minHeight: 0 },
+  heroColTitle: { fontSize: 11.5, fontWeight: 800, marginBottom: 8, paddingBottom: 6, borderBottom: "2px solid #f1f5f9", letterSpacing: "-0.01em", color: "#0f172a" },
+  heroItem: { fontSize: 11.5, marginBottom: 4, lineHeight: 1.45, padding: "6px 9px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 6 },
   heroItemRow: { display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" },
   heroAmt: { fontWeight: 800, flexShrink: 0, fontSize: 13 },
   heroPriority: { fontSize: 11, flexShrink: 0 },
@@ -650,14 +654,15 @@ const s = {
   heroEmpty: { fontSize: 12, color: "#94a3b8", textAlign: "center", padding: "24px 0", fontStyle: "italic" },
  
   // V6.3 신규 — 카테고리 그룹핑 + 체크박스 + 칩 + 시간 배지
-  heroCategorySection: { marginBottom: 10 },
-  heroCategoryHeader: { fontSize: 11, fontWeight: 800, color: "#1e293b", marginBottom: 6, padding: "5px 10px", background: "#f1f5f9", borderLeft: "3px solid #f97316", borderRadius: "3px 5px 5px 3px", letterSpacing: "-0.01em" },
-  heroTaskItem: { display: "flex", gap: 8, marginBottom: 5, alignItems: "flex-start", padding: "8px 10px", background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 7, transition: "all 0.15s ease" },
-  heroCheckbox: { width: 18, height: 18, cursor: "pointer", accentColor: "#dc2626", flexShrink: 0, marginTop: 1 },
+  heroCategorySection: { marginBottom: 8 },
+  heroCategoryHeader: { fontSize: 11, fontWeight: 800, color: "#1e293b", marginBottom: 5, padding: "4px 9px", background: "#f1f5f9", borderLeft: "3px solid #f97316", borderRadius: "3px 5px 5px 3px", letterSpacing: "-0.01em" },
+  heroCategoryGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 },
+  heroTaskItem: { display: "flex", gap: 6, marginBottom: 0, alignItems: "flex-start", padding: "6px 8px", background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 6, transition: "all 0.15s ease" },
+  heroCheckbox: { width: 16, height: 16, cursor: "pointer", accentColor: "#dc2626", flexShrink: 0, marginTop: 1 },
   heroTaskBody: { flex: 1, minWidth: 0 },
   heroTaskTopRow: { display: "flex", gap: 5, alignItems: "baseline", flexWrap: "wrap", lineHeight: 1.4 },
   heroTimeBadge: { fontSize: 10, fontWeight: 800, background: "#1e40af", color: "#fff", padding: "2px 8px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.02em" },
-  heroTaskTitle: { fontSize: 12, fontWeight: 600, wordBreak: "keep-all", flex: 1, minWidth: 0, color: "#0f172a", lineHeight: 1.4 },
+  heroTaskTitle: { fontSize: 11.5, fontWeight: 600, wordBreak: "keep-all", flex: 1, minWidth: 0, color: "#0f172a", lineHeight: 1.35 },
   heroChipRow: { display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" },
   heroChip: { fontSize: 10, fontWeight: 700, color: "#fff", padding: "2.5px 8px", borderRadius: 4, letterSpacing: "0.01em", lineHeight: 1.3 },
   heroSubMeta: { fontSize: 11, color: "#64748b", marginTop: 5, fontWeight: 500 },
@@ -668,7 +673,7 @@ const s = {
   calendarHeader: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 },
   calendarDay: { fontSize: 10, fontWeight: 700, color: "#64748b", textAlign: "center", padding: 3 },
   calendarGridBig: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, flex: 1, gridAutoRows: "1fr" },
-  calendarCellBig: { minHeight: 72, padding: "4px 5px", border: "1px solid #f1f5f9", borderRadius: 5, fontSize: 10, display: "flex", flexDirection: "column", gap: 2, transition: "all 0.15s ease", overflow: "hidden" },
+  calendarCellBig: { minHeight: 88, padding: "5px 6px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, display: "flex", flexDirection: "column", gap: 2, transition: "all 0.15s ease", overflow: "hidden" },
   calendarDayNum: { fontSize: 11, fontWeight: 600, marginBottom: 1 },
   calendarEvents: { display: "flex", flexDirection: "column", gap: 1.5 },
   calendarEvent: { fontSize: 9, padding: "1px 4px", borderRadius: 3, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
