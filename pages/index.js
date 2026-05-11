@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-
+ 
 export default function Dashboard() {
   const [items, setItems] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -15,10 +15,10 @@ export default function Dashboard() {
   const [logContent, setLogContent] = useState("");
   const [logSubmitting, setLogSubmitting] = useState(false);
   const [logFeedback, setLogFeedback] = useState("");
-
+ 
   const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
   const todayStr = today.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
-
+ 
   const fetchAll = () => {
     setLoading(true);
     Promise.all([
@@ -34,9 +34,9 @@ export default function Dashboard() {
       setLoading(false);
     }).catch(err => { setError(err.message); setLoading(false); });
   };
-
+ 
   useEffect(() => { fetchAll(); }, []);
-
+ 
   const toggleComplete = async (item) => {
     const prev = item.status;
     const newDone = item.status !== "완료";
@@ -52,7 +52,7 @@ export default function Dashboard() {
     } catch (err) { setItems(p => p.map(i => i.id === item.id ? { ...i, status: prev } : i)); alert("실패: " + err.message); }
     finally { setUpdatingItems(p => { const n = new Set(p); n.delete(item.id); return n; }); }
   };
-
+ 
   const submitLog = async () => {
     if (!logContent.trim()) return;
     setLogSubmitting(true); setLogFeedback("");
@@ -64,7 +64,7 @@ export default function Dashboard() {
     } catch (err) { setLogFeedback("❌ " + err.message); }
     finally { setLogSubmitting(false); }
   };
-
+ 
   const submitAddPayment = async () => {
     if (!modalData.title || !modalData.date) { alert("제목과 날짜는 필수"); return; }
     setSubmitting(true);
@@ -76,7 +76,7 @@ export default function Dashboard() {
     } catch (err) { alert("저장 실패: " + err.message); }
     finally { setSubmitting(false); }
   };
-
+ 
   const submitEditProject = async () => {
     setSubmitting(true);
     try {
@@ -87,17 +87,17 @@ export default function Dashboard() {
     } catch (err) { alert("저장 실패: " + err.message); }
     finally { setSubmitting(false); }
   };
-
+ 
   const calcDDay = (dateStr) => { if (!dateStr) return null; const t = new Date(dateStr); t.setHours(0,0,0,0); return Math.round((t - today) / 86400000); };
   const fmtAmount = (num) => { if (!num) return "0"; if (num >= 100000000) return `${(num/100000000).toFixed(2)}억`; if (num >= 10000) return `${Math.round(num/10000).toLocaleString("ko-KR")}만`; return num.toLocaleString("ko-KR"); };
   const fmtDate = (dateStr) => { if (!dateStr) return ""; const d = new Date(dateStr); return `${d.getMonth()+1}/${d.getDate()}`; };
-
+ 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items;
     const q = searchQuery.toLowerCase();
     return items.filter(i => (i.title||"").toLowerCase().includes(q) || (i.vendor||"").toLowerCase().includes(q) || (i.category||"").toLowerCase().includes(q));
   }, [items, searchQuery]);
-
+ 
   const todayMonth = today.toISOString().substring(0, 7);
   const monthItems = filteredItems.filter(i => i.date && i.date.startsWith(todayMonth));
   const monthDep = monthItems.filter(i => i.type === "입금").reduce((s,i) => s + (i.amount||0), 0);
@@ -105,17 +105,17 @@ export default function Dashboard() {
   const monthNet = monthDep - monthWd;
   const monthUpcomingDep = monthItems.filter(i => i.type === "입금" && i.status !== "완료" && calcDDay(i.date) >= 0).reduce((s,i) => s + (i.amount||0), 0);
   const monthUpcomingWd = monthItems.filter(i => i.type === "출금" && i.status !== "완료" && calcDDay(i.date) >= 0).reduce((s,i) => s + (i.amount||0), 0);
-
+ 
   const missionTarget = 450000000;
   const missionDate = useMemo(() => { const d = new Date("2026-06-15"); d.setHours(0,0,0,0); return d; }, []);
   const missionDDay = Math.round((missionDate - today) / 86400000);
   const missionPct = Math.min((monthDep / missionTarget) * 100, 100);
-
+ 
   const bucket = (min, max) => filteredItems.filter(i => { const d = calcDDay(i.date); return d !== null && d >= min && d <= max; }).sort((a,b) => new Date(a.date) - new Date(b.date));
   const tomorrowBucket = bucket(1, 1);
   const thisWeekBucket = bucket(2, 7);
   const next15Bucket = bucket(8, 15);
-
+ 
   const calendar = useMemo(() => {
     const year = today.getFullYear(); const month = today.getMonth();
     const firstWeekday = new Date(year, month, 1).getDay();
@@ -137,7 +137,7 @@ export default function Dashboard() {
     }
     return { cells, monthName: today.toLocaleDateString("ko-KR", { year: "numeric", month: "long" }) };
   }, [items, today]);
-
+ 
   const iconFor = (item) => {
     const t = (item.title||"").toLowerCase(); const v = (item.vendor||"").toLowerCase(); const c = item.category||"";
     if (t.includes("자사몰") || v.includes("자사몰")) return "🛒";
@@ -160,7 +160,7 @@ export default function Dashboard() {
     if (c === "매출 정산") return "💰"; if (c === "대출 상환") return "🏦";
     return "📌";
   };
-
+ 
   // V6 — 압축형 항목 렌더 (한 줄에 빽빽이)
   const renderItemCompact = (item) => {
     const dday = calcDDay(item.date); const isIncome = item.type === "입금";
@@ -185,7 +185,7 @@ export default function Dashboard() {
       </div>
     );
   };
-
+ 
   const renderBucketBox = (title, list, emoji, accentColor) => {
     const dep = list.filter(i => i.type === "입금").reduce((sum,i) => sum + (i.amount||0), 0);
     const wd = list.filter(i => i.type === "출금").reduce((sum,i) => sum + (i.amount||0), 0);
@@ -206,10 +206,10 @@ export default function Dashboard() {
       </section>
     );
   };
-
+ 
   const categoryColor = { "해외 진출": "#3b82f6", "국내 B2B": "#10b981", "매장": "#f97316", "신규 SKU": "#a855f7", "공급사": "#ec4899", "운영": "#eab308", "기타": "#64748b" };
   const statusColor = { "진행 중": "#10b981", "검토 중": "#eab308", "대기 중": "#94a3b8", "완료": "#3b82f6", "보류": "#ef4444" };
-
+ 
   const renderProject = (p) => (
     <div key={p.id} style={s.projectCard} onClick={() => { setModalData({ pageId: p.id, ...p }); setModal("edit-project"); }}>
       <div style={s.projectHeader}>
@@ -223,7 +223,7 @@ export default function Dashboard() {
       {p.nextAction && <div style={s.projectNext}>→ {p.nextAction}</div>}
     </div>
   );
-
+ 
   const renderHeroToday = () => {
     const safe = todayData || { payments: [], tasks: [], deadlines: [] };
     const { payments, tasks, deadlines } = safe;
@@ -278,7 +278,7 @@ export default function Dashboard() {
       </section>
     );
   };
-
+ 
   return (
     <div style={s.container}>
       <div style={s.inner}>
@@ -300,10 +300,10 @@ export default function Dashboard() {
             <button style={s.iconBtn} onClick={fetchAll} title="새로고침">🔄</button>
           </div>
         </header>
-
+ 
         {loading && <div style={s.loading}>노션에서 데이터 불러오는 중...</div>}
         {error && <div style={s.error}>⚠️ 오류: {error}</div>}
-
+ 
         {!loading && !error && (
           <>
             {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
@@ -350,7 +350,7 @@ export default function Dashboard() {
                 </section>
               </div>
             </div>
-
+ 
             {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             {/* 2단 — 진행 중인 업무 (가로 전체 / 3열 압축)                  */}
             {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
@@ -363,7 +363,7 @@ export default function Dashboard() {
                 {projects.length === 0 ? (<div style={s.emptyState}>진행 중인 업무 없음</div>) : projects.map(renderProject)}
               </div>
             </section>
-
+ 
             {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             {/* 3단 — 4박스 가로 분할 (내일 · 이번주 · D-15 · 자금)           */}
             {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
@@ -412,13 +412,13 @@ export default function Dashboard() {
                 </div>
               </section>
             </div>
-
+ 
             <footer style={s.footer}>
               📡 앙투어솔레 CEO SAAS · {new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 갱신
             </footer>
           </>
         )}
-
+ 
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         {/* 모달 — 새 일정 / 업무 수정 / 빠른 메모                          */}
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
@@ -460,7 +460,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-
+ 
         {modal === "edit-project" && (
           <div style={s.modalOverlay} onClick={() => setModal(null)}>
             <div style={s.modal} onClick={e => e.stopPropagation()}>
@@ -496,7 +496,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-
+ 
         {modal === "memo" && (
           <div style={s.modalOverlay} onClick={() => setModal(null)}>
             <div style={s.modal} onClick={e => e.stopPropagation()}>
@@ -521,7 +521,7 @@ export default function Dashboard() {
     </div>
   );
 }
-
+ 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // V6 스타일 — 인지과학 4단계 위계 / 노트북 가로 폭 활용 / 3색 시스템
 // 위계: 18(L1 타이틀) · 14(L2 섹션) · 12(L3 본문) · 10(L4 메타)
@@ -530,7 +530,7 @@ export default function Dashboard() {
 const s = {
   container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 12 },
   inner: { maxWidth: 1600, margin: "0 auto" },
-
+ 
   // 헤더 — 슬림, 좌우 분리
   topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 8px", gap: 10 },
   topbarLeft: { display: "flex", alignItems: "baseline", gap: 12, minWidth: 0 },
@@ -541,19 +541,19 @@ const s = {
   searchInput: { width: "100%", padding: "7px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, backgroundColor: "#fff", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
   searchCount: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 6px", borderRadius: 6, fontWeight: 600 },
   iconBtn: { width: 36, height: 36, borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", cursor: "pointer", fontSize: 16, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-
+ 
   // 1단 — 좌(오늘) / 우(캘린더) 가로 분할
-  row1: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr)", gap: 10, marginBottom: 10, alignItems: "stretch" },
+  row1: { display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 12 },
   row1Left: { display: "flex", flexDirection: "column", minHeight: 0 },
   row1Right: { display: "flex", flexDirection: "column", minHeight: 0 },
-
+ 
   // Hero 오늘 박스 — 본인이 가장 먼저 보는 곳, 색상 강도 최고
   heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 12, padding: "14px 16px", color: "#fff", boxShadow: "0 4px 14px rgba(220,38,38,0.2)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
   heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
   heroTitle: { fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
   heroSubtitle: { fontSize: 11, opacity: 0.9, fontWeight: 500 },
   heroDday: { fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "4px 10px", borderRadius: 10, whiteSpace: "nowrap" },
-  heroGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, flex: 1 },
+  heroGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, flex: 1 },
   heroCol: { background: "rgba(255,255,255,0.12)", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column" },
   heroColTitle: { fontSize: 11, fontWeight: 700, marginBottom: 6, paddingBottom: 5, borderBottom: "1px solid rgba(255,255,255,0.15)", letterSpacing: "-0.01em" },
   heroItem: { fontSize: 11, marginBottom: 6, lineHeight: 1.4 },
@@ -563,9 +563,9 @@ const s = {
   heroItemTitle: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   heroSub: { fontSize: 10, opacity: 0.8, marginTop: 1, paddingLeft: 2 },
   heroEmpty: { fontSize: 11, opacity: 0.6, textAlign: "center", padding: "12px 0", fontStyle: "italic" },
-
+ 
   // 캘린더 — 한 눈에 5월 전체
-  calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
+  calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", boxSizing: "border-box", display: "flex", flexDirection: "column", maxWidth: 1100, width: "100%", margin: "0 auto" },
   calendarBig: { padding: "2px 0", flex: 1, display: "flex", flexDirection: "column" },
   calendarHeader: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 },
   calendarDay: { fontSize: 10, fontWeight: 700, color: "#64748b", textAlign: "center", padding: 3 },
@@ -576,13 +576,13 @@ const s = {
   calendarEvent: { fontSize: 9, padding: "1px 4px", borderRadius: 3, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
   calendarMore: { fontSize: 9, color: "#94a3b8", fontWeight: 600, textAlign: "center", padding: "1px 0" },
   calendarHint: { fontSize: 10, color: "#94a3b8", fontWeight: 500 },
-
+ 
   // 공통 섹션 (진행 업무 등)
   section: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 10 },
   sectionHeaderSlim: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #f1f5f9" },
   sectionTitleSmall: { fontSize: 13, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 },
   sectionCount: { fontSize: 10, fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "1px 7px", borderRadius: 8 },
-
+ 
   // 진행 업무 — 3열 그리드, 카드 컴팩트
   projectGridV6: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: "2px 0 4px" },
   projectCard: { padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, backgroundColor: "#fff", cursor: "pointer", transition: "all 0.15s ease" },
@@ -593,7 +593,7 @@ const s = {
   projectBadge: { fontSize: 9, fontWeight: 700, color: "#fff", padding: "2px 7px", borderRadius: 9 },
   projectStatus: { fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 9, border: "1px solid", backgroundColor: "#fff" },
   projectNext: { fontSize: 11, color: "#475569", lineHeight: 1.4 },
-
+ 
   // 3단 — 4박스 가로 분할
   row3: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10, alignItems: "stretch" },
   bucketBox: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 12px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", minHeight: 0 },
@@ -605,7 +605,7 @@ const s = {
   bucketSummary: { display: "flex", gap: 5, fontSize: 10, fontWeight: 700, flexShrink: 0 },
   bucketList: { display: "flex", flexDirection: "column", flex: 1 },
   bucketEmpty: { textAlign: "center", padding: "16px 4px", color: "#94a3b8", fontSize: 11, fontStyle: "italic" },
-
+ 
   // 압축형 항목 (V6) — 한 줄에 빽빽이
   itemCompact: { display: "flex", alignItems: "center", gap: 6, padding: "5px 4px 5px 6px", borderBottom: "1px solid #f8fafc" },
   checkbox: { width: 14, height: 14, cursor: "pointer", accentColor: "#3b82f6", flexShrink: 0 },
@@ -615,7 +615,7 @@ const s = {
   itemCompactMeta: { fontSize: 10, color: "#64748b", display: "flex", gap: 3, alignItems: "center", flexWrap: "nowrap", overflow: "hidden" },
   itemDot: { color: "#cbd5e1" },
   itemCompactAmount: { fontSize: 11, fontWeight: 700, flexShrink: 0, textAlign: "right", letterSpacing: "-0.01em" },
-
+ 
   // 자금 박스 (3단 우측)
   fundList: { display: "flex", flexDirection: "column", gap: 6, padding: "4px 0" },
   fundRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline" },
@@ -628,9 +628,9 @@ const s = {
   fundMissionLabel: { fontSize: 10, fontWeight: 700, color: "#1e40af", marginBottom: 5 },
   fundMissionBarBg: { height: 6, backgroundColor: "#dbeafe", borderRadius: 3, overflow: "hidden" },
   fundMissionBarFill: { height: "100%", background: "linear-gradient(90deg, #3b82f6 0%, #1e40af 100%)", borderRadius: 3, transition: "width 0.5s ease" },
-
+ 
   emptyState: { textAlign: "center", padding: "16px 8px", color: "#94a3b8", fontSize: 12 },
-
+ 
   // 모달
   modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 },
   modal: { backgroundColor: "#fff", borderRadius: 16, padding: "24px 24px 20px", width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" },
@@ -642,10 +642,10 @@ const s = {
   modalBtns: { display: "flex", gap: 8, justifyContent: "flex-end" },
   modalBtnSecondary: { padding: "9px 16px", borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", color: "#475569", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
   modalBtnPrimary: { padding: "9px 16px", borderRadius: 8, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
-
+ 
   loading: { textAlign: "center", padding: 60, color: "#64748b", fontSize: 14 },
   error: { backgroundColor: "#fee2e2", border: "1px solid #fca5a5", color: "#b91c1c", padding: 16, borderRadius: 10, marginBottom: 16, fontSize: 13 },
   logFeedback: { fontSize: 12, color: "#10b981", textAlign: "center", padding: "6px 0", fontWeight: 600 },
   footer: { marginTop: 12, paddingTop: 10, textAlign: "center", color: "#94a3b8", fontSize: 10 },
 };
-
+ 
