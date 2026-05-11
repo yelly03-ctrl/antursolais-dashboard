@@ -42,6 +42,13 @@ export default function Dashboard() {
     const newDone = item.status !== "완료";
     setUpdatingItems(p => new Set(p).add(item.id));
     setItems(p => p.map(i => i.id === item.id ? { ...i, status: newDone ? "완료" : "예정" } : i));
+    // V6.3 — todayData 옵티미스틱 업데이트 (할 일 체크박스 즉시 반영)
+    setTodayData(prev => prev ? {
+      ...prev,
+      tasks: (prev.tasks || []).map(t => t.id === item.id ? { ...t, status: newDone ? "완료" : "예정" } : t),
+      payments: (prev.payments || []).map(p => p.id === item.id ? { ...p, status: newDone ? "완료" : "예정" } : p),
+      deadlines: (prev.deadlines || []).map(d => d.id === item.id ? { ...d, status: newDone ? "완료" : "예정" } : d),
+    } : prev);
     try {
       const res = await fetch("/api/update-status", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -227,41 +234,119 @@ export default function Dashboard() {
   const renderHeroToday = () => {
     const safe = todayData || { payments: [], tasks: [], deadlines: [] };
     const { payments, tasks, deadlines } = safe;
-    const totalCount = payments.length + tasks.length + deadlines.length;
+ 
+    // V6.3 — 시간 추출 (제목에서 "9시", "11시 30분" 같은 패턴)
+    const extractTime = (title) => {
+      const m = (title || "").match(/(\d{1,2})시(?:\s*(\d{1,2})분)?/);
+      if (!m) return null;
+      return m[2] ? `${m[1]}:${m[2].padStart(2, "0")}` : `${m[1]}시`;
+    };
+ 
+    // V6.3 — 메모에서 자동/이월 칩 추출
+    const extractChips = (memo) => {
+      if (!memo) return [];
+      const chips = [];
+      if (memo.includes("[결제 자동]") || memo.includes("[진행업무 자동]")) chips.push({ label: "🤖 자동", color: "rgba(59,130,246,0.85)" });
+      if (memo.includes("[어제 이월]")) chips.push({ label: "⏭️ 어제 이월", color: "rgba(245,158,11,0.85)" });
+      return chips;
+    };
+ 
+    // V6.3 — 카테고리별 그룹핑 (현금 흐름 우선 순서)
+    const categoryOrder = ["자금", "영업", "거래처", "생산", "제품", "마케팅", "인증규제", "HR", "기타"];
+    const categoryIcons = { "자금": "💰", "영업": "🏪", "거래처": "🤝", "생산": "🏭", "제품": "📦", "마케팅": "📣", "인증규제": "📋", "HR": "👥", "기타": "📌" };
+    const tasksByCategory = {};
+    tasks.forEach(t => {
+      const cat = t.category || "기타";
+      if (!tasksByCategory[cat]) tasksByCategory[cat] = [];
+      tasksByCategory[cat].push(t);
+    });
+ 
+    // V6.3 — 통계 (예정/완료/이월/자동)
+    const totalTasks = tasks.length;
+    const doneTasks = tasks.filter(t => t.status === "완료").length;
+    const pendingTasks = totalTasks - doneTasks;
+    const carriedOver = tasks.filter(t => t.memo && t.memo.includes("[어제 이월]")).length;
+    const autoCreated = tasks.filter(t => t.memo && (t.memo.includes("[결제 자동]") || t.memo.includes("[진행업무 자동]"))).length;
+ 
     return (
       <section style={s.heroToday}>
         <div style={s.heroHeader}>
           <div>
             <div style={s.heroTitle}>🔥 오늘 — {todayStr}</div>
-            <div style={s.heroSubtitle}>{totalCount === 0 ? "오늘 일정·할 일이 없어요. 캘린더에서 다음 일정 확인하세요." : `처리할 항목 ${totalCount}건`}</div>
+            <div style={s.heroSubtitle}>
+              할 일 {pendingTasks}건 진행 중 · 완료 {doneTasks}건 · 어제 이월 {carriedOver}건 · 🤖 자동 박힌 항목 {autoCreated}건
+            </div>
           </div>
           <div style={s.heroDday}>D-{missionDDay} · 6/15 미션 {missionPct.toFixed(0)}%</div>
         </div>
+ 
         <div style={s.heroGrid}>
+          {/* ━━━ 💰 결제 컬럼 — 시간순 (예정 위, 완료 아래) ━━━ */}
           <div style={s.heroCol}>
             <div style={s.heroColTitle}>💰 오늘 결제 ({payments.length})</div>
             {payments.length === 0 ? <div style={s.heroEmpty}>없음</div> : payments.map(p => (
               <div key={p.id} style={s.heroItem}>
                 <div style={s.heroItemRow}>
-                  <span style={{ ...s.heroAmt, color: p.type === "입금" ? "#bbf7d0" : "#fecaca" }}>{p.type === "입금" ? "+" : "−"}{fmtAmount(p.amount)}</span>
+                  <span style={{ ...s.heroAmt, color: p.type === "입금" ? "#bbf7d0" : "#fecaca" }}>
+                    {p.type === "입금" ? "+" : "−"}{fmtAmount(p.amount)}
+                  </span>
                   <span style={s.heroItemTitle}>{p.title}</span>
                 </div>
                 {p.vendor && <div style={s.heroSub}>{p.vendor}</div>}
               </div>
             ))}
           </div>
+ 
+          {/* ━━━ ✅ 할 일 컬럼 — 카테고리 그룹 + 체크박스 + 칩 + 시간 ━━━ */}
           <div style={s.heroCol}>
-            <div style={s.heroColTitle}>✅ 오늘 할 일 ({tasks.length})</div>
-            {tasks.length === 0 ? <div style={s.heroEmpty}>없음</div> : tasks.map(t => (
-              <div key={t.id} style={s.heroItem}>
-                <div style={s.heroItemRow}>
-                  {t.priority && <span style={s.heroPriority}>{t.priority}</span>}
-                  <span style={s.heroItemTitle}>{t.title}</span>
+            <div style={s.heroColTitle}>✅ 오늘 할 일 ({pendingTasks} / {totalTasks})</div>
+            {tasks.length === 0 ? <div style={s.heroEmpty}>없음</div> :
+              categoryOrder.filter(cat => tasksByCategory[cat]).map(cat => (
+                <div key={cat} style={s.heroCategorySection}>
+                  <div style={s.heroCategoryHeader}>
+                    {categoryIcons[cat] || "📌"} {cat} ({tasksByCategory[cat].length})
+                  </div>
+                  {tasksByCategory[cat].map(t => {
+                    const isDone = t.status === "완료";
+                    const isUpdating = updatingItems.has(t.id);
+                    const time = extractTime(t.title);
+                    const chips = extractChips(t.memo);
+                    const displayTitle = t.title.replace(/^(\d{1,2})시(?:\s*\d{1,2}분)?\s*/, "");
+                    return (
+                      <div key={t.id} style={s.heroTaskItem}>
+                        <input
+                          type="checkbox"
+                          checked={isDone}
+                          disabled={isUpdating}
+                          onChange={() => toggleComplete({ id: t.id, status: t.status })}
+                          style={s.heroCheckbox}
+                        />
+                        <div style={s.heroTaskBody}>
+                          <div style={s.heroTaskTopRow}>
+                            {time && <span style={s.heroTimeBadge}>{time}</span>}
+                            {t.priority && <span style={s.heroPriority}>{t.priority}</span>}
+                            <span style={{ ...s.heroTaskTitle, textDecoration: isDone ? "line-through" : "none", opacity: isDone ? 0.5 : 1 }}>
+                              {displayTitle || t.title}
+                            </span>
+                          </div>
+                          {chips.length > 0 && (
+                            <div style={s.heroChipRow}>
+                              {chips.map((c, i) => (
+                                <span key={i} style={{ ...s.heroChip, background: c.color }}>{c.label}</span>
+                              ))}
+                            </div>
+                          )}
+                          {t.relatedTo && <div style={s.heroSubMeta}>→ {t.relatedTo}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                {t.category && <div style={s.heroSub}>{t.category}</div>}
-              </div>
-            ))}
+              ))
+            }
           </div>
+ 
+          {/* ━━━ 🚧 마감 업무 컬럼 ━━━ */}
           <div style={s.heroCol}>
             <div style={s.heroColTitle}>🚧 오늘 마감 업무 ({deadlines.length})</div>
             {deadlines.length === 0 ? <div style={s.heroEmpty}>없음</div> : deadlines.map(d => (
@@ -528,8 +613,8 @@ export default function Dashboard() {
 // 색상: 빨강(위험·출금) / 초록(안전·입금) / 파랑(정보) / 회색(중립)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const s = {
-  container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 12 },
-  inner: { maxWidth: 1600, margin: "0 auto" },
+  container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 16 },
+  inner: { maxWidth: 2400, margin: "0 auto" },
  
   // 헤더 — 슬림, 좌우 분리
   topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 8px", gap: 10 },
@@ -542,10 +627,10 @@ const s = {
   searchCount: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 6px", borderRadius: 6, fontWeight: 600 },
   iconBtn: { width: 36, height: 36, borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", cursor: "pointer", fontSize: 16, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
  
-  // 1단 — 좌(오늘) / 우(캘린더) 가로 분할
-  row1: { display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 12 },
-  row1Left: { display: "flex", flexDirection: "column", minHeight: 0 },
-  row1Right: { display: "flex", flexDirection: "column", minHeight: 0 },
+  // V6.3: 위(🔥 오늘 — 100% 폭) + 아래(📅 캘린더 — 가운데 정렬)
+  row1: { display: "block", marginBottom: 12 },
+  row1Left: { display: "block", width: "100%", marginBottom: 12 },
+  row1Right: { display: "block", width: "100%", maxWidth: 1200, margin: "0 auto" },
  
   // Hero 오늘 박스 — 본인이 가장 먼저 보는 곳, 색상 강도 최고
   heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 12, padding: "14px 16px", color: "#fff", boxShadow: "0 4px 14px rgba(220,38,38,0.2)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
@@ -553,19 +638,32 @@ const s = {
   heroTitle: { fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
   heroSubtitle: { fontSize: 11, opacity: 0.9, fontWeight: 500 },
   heroDday: { fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "4px 10px", borderRadius: 10, whiteSpace: "nowrap" },
-  heroGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, flex: 1 },
-  heroCol: { background: "rgba(255,255,255,0.12)", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column" },
+  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr)", gap: 12, flex: 1 },
+  heroCol: { background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", maxHeight: 620, overflowY: "auto" },
   heroColTitle: { fontSize: 11, fontWeight: 700, marginBottom: 6, paddingBottom: 5, borderBottom: "1px solid rgba(255,255,255,0.15)", letterSpacing: "-0.01em" },
-  heroItem: { fontSize: 11, marginBottom: 6, lineHeight: 1.4 },
-  heroItemRow: { display: "flex", gap: 5, alignItems: "baseline" },
-  heroAmt: { fontWeight: 800, flexShrink: 0, fontSize: 11 },
-  heroPriority: { fontSize: 10, flexShrink: 0 },
-  heroItemTitle: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  heroItem: { fontSize: 12, marginBottom: 8, lineHeight: 1.45, paddingBottom: 6, borderBottom: "1px solid rgba(255,255,255,0.06)" },
+  heroItemRow: { display: "flex", gap: 6, alignItems: "flex-start", flexWrap: "wrap" },
+  heroAmt: { fontWeight: 800, flexShrink: 0, fontSize: 12 },
+  heroPriority: { fontSize: 11, flexShrink: 0 },
+  heroItemTitle: { fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "keep-all" },
   heroSub: { fontSize: 10, opacity: 0.8, marginTop: 1, paddingLeft: 2 },
   heroEmpty: { fontSize: 11, opacity: 0.6, textAlign: "center", padding: "12px 0", fontStyle: "italic" },
  
+  // V6.3 신규 — 카테고리 그룹핑 + 체크박스 + 칩 + 시간 배지
+  heroCategorySection: { marginBottom: 10 },
+  heroCategoryHeader: { fontSize: 10, fontWeight: 700, opacity: 0.85, marginBottom: 5, paddingBottom: 3, borderBottom: "1px solid rgba(255,255,255,0.1)", letterSpacing: "0.02em", textTransform: "none" },
+  heroTaskItem: { display: "flex", gap: 8, marginBottom: 7, alignItems: "flex-start", paddingBottom: 6, borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  heroCheckbox: { width: 15, height: 15, cursor: "pointer", accentColor: "#ffffff", flexShrink: 0, marginTop: 2 },
+  heroTaskBody: { flex: 1, minWidth: 0 },
+  heroTaskTopRow: { display: "flex", gap: 5, alignItems: "baseline", flexWrap: "wrap", lineHeight: 1.4 },
+  heroTimeBadge: { fontSize: 9, fontWeight: 800, background: "rgba(255,255,255,0.28)", padding: "1.5px 6px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.02em" },
+  heroTaskTitle: { fontSize: 12, fontWeight: 600, wordBreak: "keep-all", flex: 1, minWidth: 0 },
+  heroChipRow: { display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" },
+  heroChip: { fontSize: 9, fontWeight: 700, color: "#fff", padding: "1.5px 6px", borderRadius: 4, letterSpacing: "0.01em", lineHeight: 1.2 },
+  heroSubMeta: { fontSize: 10, opacity: 0.7, marginTop: 3, fontStyle: "italic" },
+ 
   // 캘린더 — 한 눈에 5월 전체
-  calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", boxSizing: "border-box", display: "flex", flexDirection: "column", maxWidth: 1100, width: "100%", margin: "0 auto" },
+  calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "12px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" },
   calendarBig: { padding: "2px 0", flex: 1, display: "flex", flexDirection: "column" },
   calendarHeader: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 },
   calendarDay: { fontSize: 10, fontWeight: 700, color: "#64748b", textAlign: "center", padding: 3 },
