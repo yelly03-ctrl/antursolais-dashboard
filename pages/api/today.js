@@ -1,9 +1,14 @@
 import { Client } from "@notionhq/client";
-
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 const PAYMENT_DB_ID = "53e312183ab2425dbebf9cb41a4b6928";
 const TASKS_DB_ID = "c709b76c63b94f03883f7051d089d343";
 const PROJECTS_DB_ID = "d6a2c6681ee349c0ba0a483391cab615";
+
+// V6.8 — 메모에 "CEO 화면 제외" 표시된 항목은 CEO 화면에서 숨김
+const isHiddenFromCEO = (page) => {
+  const memo = page.properties["메모"]?.rich_text?.[0]?.plain_text || "";
+  return memo.includes("CEO 화면 제외");
+};
 
 export default async function handler(req, res) {
   try {
@@ -14,7 +19,6 @@ export default async function handler(req, res) {
       day: "2-digit",
     });
     const today = formatter.format(new Date());
-
     const [paymentsRes, tasksRes, projectsRes] = await Promise.all([
       notion.databases.query({
         database_id: PAYMENT_DB_ID,
@@ -32,7 +36,6 @@ export default async function handler(req, res) {
         page_size: 50,
       }),
     ]);
-
     const payments = paymentsRes.results.map((page) => {
       const p = page.properties;
       return {
@@ -44,30 +47,32 @@ export default async function handler(req, res) {
         status: p["상태"]?.select?.name || "",
       };
     });
-
-    const tasks = tasksRes.results.map((page) => {
-      const p = page.properties;
-      return {
-        id: page.id,
-        title: p["제목"]?.title?.[0]?.plain_text || "",
-        category: p["카테고리"]?.select?.name || "",
-        priority: p["우선순위"]?.select?.name || "",
-        status: p["상태"]?.select?.name || "",
-      };
-    });
-
-    const deadlines = projectsRes.results.map((page) => {
-      const p = page.properties;
-      return {
-        id: page.id,
-        title: p["제목"]?.title?.[0]?.plain_text || "",
-        category: p["카테고리"]?.select?.name || "",
-        priority: p["우선순위"]?.select?.name || "",
-        nextAction: p["다음 액션"]?.rich_text?.[0]?.plain_text || "",
-        status: p["상태"]?.select?.name || "",
-      };
-    });
-
+    const tasks = tasksRes.results
+      .filter((page) => !isHiddenFromCEO(page))
+      .map((page) => {
+        const p = page.properties;
+        return {
+          id: page.id,
+          title: p["제목"]?.title?.[0]?.plain_text || "",
+          category: p["카테고리"]?.select?.name || "",
+          priority: p["우선순위"]?.select?.name || "",
+          status: p["상태"]?.select?.name || "",
+          memo: p["메모"]?.rich_text?.[0]?.plain_text || "",
+        };
+      });
+    const deadlines = projectsRes.results
+      .filter((page) => !isHiddenFromCEO(page))
+      .map((page) => {
+        const p = page.properties;
+        return {
+          id: page.id,
+          title: p["제목"]?.title?.[0]?.plain_text || "",
+          category: p["카테고리"]?.select?.name || "",
+          priority: p["우선순위"]?.select?.name || "",
+          nextAction: p["다음 액션"]?.rich_text?.[0]?.plain_text || "",
+          status: p["상태"]?.select?.name || "",
+        };
+      });
     res.status(200).json({ today, payments, tasks, deadlines });
   } catch (error) {
     console.error("Today API error:", error);
