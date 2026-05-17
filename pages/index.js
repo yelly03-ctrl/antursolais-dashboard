@@ -1,753 +1,1216 @@
 import { useState, useEffect, useMemo } from "react";
- 
+import Head from "next/head";
+
 export default function Dashboard() {
-  const [items, setItems] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [todayData, setTodayData] = useState(null);
+  const [todayData, setTodayData] = useState({ payments: [], tasks: [], deadlines: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [updatingItems, setUpdatingItems] = useState(new Set());
-  const [modal, setModal] = useState(null);
-  const [modalData, setModalData] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [logTitle, setLogTitle] = useState("");
-  const [logContent, setLogContent] = useState("");
-  const [logSubmitting, setLogSubmitting] = useState(false);
-  const [logFeedback, setLogFeedback] = useState("");
- 
-  const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
-  const todayStr = today.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
- 
-  const fetchAll = () => {
-    setLoading(true);
+
+  useEffect(() => {
     Promise.all([
-      fetch("/api/payments").then(r => r.json()).catch(e => ({ error: e.message, items: [] })),
-      fetch("/api/projects").then(r => r.json()).catch(e => ({ error: e.message, items: [] })),
-      fetch("/api/today").then(r => r.json()).catch(e => ({ error: e.message })),
-    ]).then(([payData, projData, todayRes]) => {
-      if (payData.error) setError(payData.error);
-      else { setItems(payData.items || []); setError(null); }
-      setProjects(projData.items || []);
-      if (todayRes && !todayRes.error) setTodayData(todayRes);
-      else setTodayData(null);
-      setLoading(false);
-    }).catch(err => { setError(err.message); setLoading(false); });
-  };
- 
-  useEffect(() => { fetchAll(); }, []);
- 
-  const toggleComplete = async (item) => {
-    const prev = item.status;
-    const newDone = item.status !== "완료";
-    setUpdatingItems(p => new Set(p).add(item.id));
-    setItems(p => p.map(i => i.id === item.id ? { ...i, status: newDone ? "완료" : "예정" } : i));
-    // V6.3 — todayData 옵티미스틱 업데이트 (할 일 체크박스 즉시 반영)
-    setTodayData(prev => prev ? {
-      ...prev,
-      tasks: (prev.tasks || []).map(t => t.id === item.id ? { ...t, status: newDone ? "완료" : "예정" } : t),
-      payments: (prev.payments || []).map(p => p.id === item.id ? { ...p, status: newDone ? "완료" : "예정" } : p),
-      deadlines: (prev.deadlines || []).map(d => d.id === item.id ? { ...d, status: newDone ? "완료" : "예정" } : d),
-    } : prev);
-    try {
-      const res = await fetch("/api/update-status", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageId: item.id, completed: newDone }),
+      fetch("/api/payments").then((r) => r.json()).catch(() => ({ items: [] })),
+      fetch("/api/projects").then((r) => r.json()).catch(() => ({ items: [] })),
+      fetch("/api/today").then((r) => r.json()).catch(() => ({ payments: [], tasks: [], deadlines: [] })),
+    ])
+      .then(([pay, proj, td]) => {
+        setPayments(pay.items || []);
+        setProjects(proj.items || []);
+        setTodayData(td || { payments: [], tasks: [], deadlines: [] });
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
       });
-      const d = await res.json();
-      if (d.error) { setItems(p => p.map(i => i.id === item.id ? { ...i, status: prev } : i)); alert("실패: " + d.error); }
-    } catch (err) { setItems(p => p.map(i => i.id === item.id ? { ...i, status: prev } : i)); alert("실패: " + err.message); }
-    finally { setUpdatingItems(p => { const n = new Set(p); n.delete(item.id); return n; }); }
+  }, []);
+
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // ë‚ ì§œÂ·ìˆ«ìž í—¬í¼
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const weekday = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][today.getDay()];
+  const dateLabel = `${yyyy}.${mm}.${dd} ${weekday}`;
+
+  const getISOWeek = (d) => {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return Math.ceil(((t - yearStart) / 86400000 + 1) / 7);
   };
- 
-  const submitLog = async () => {
-    if (!logContent.trim()) return;
-    setLogSubmitting(true); setLogFeedback("");
-    try {
-      const res = await fetch("/api/work-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: logTitle, content: logContent }) });
-      const d = await res.json();
-      if (d.error) setLogFeedback("❌ " + d.error);
-      else { setLogFeedback("✅ 노션 CEO SAAS에 저장됐어요"); setLogTitle(""); setLogContent(""); setTimeout(() => { setLogFeedback(""); setModal(null); }, 1500); }
-    } catch (err) { setLogFeedback("❌ " + err.message); }
-    finally { setLogSubmitting(false); }
+  const currentWeek = getISOWeek(today);
+
+  const dayOfYear = (() => {
+    const start = new Date(today.getFullYear(), 0, 0);
+    return Math.floor((today - start) / 86400000);
+  })();
+
+  const calcDDay = (dateStr) => {
+    if (!dateStr) return null;
+    const t = new Date(dateStr);
+    t.setHours(0, 0, 0, 0);
+    return Math.round((t - today) / 86400000);
   };
- 
-  const submitAddPayment = async () => {
-    if (!modalData.title || !modalData.date) { alert("제목과 날짜는 필수"); return; }
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/create-payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(modalData) });
-      const d = await res.json();
-      if (d.error) alert("저장 실패: " + d.error);
-      else { setModal(null); setModalData({}); fetchAll(); }
-    } catch (err) { alert("저장 실패: " + err.message); }
-    finally { setSubmitting(false); }
+
+  const fmtMM = (num) => {
+    // ë°±ë§Œì› ë‹¨ìœ„
+    const v = num / 1000000;
+    if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "B";
+    if (Math.abs(v) >= 100) return Math.round(v).toString();
+    if (Math.abs(v) >= 10) return v.toFixed(0);
+    return v.toFixed(1);
   };
- 
-  const submitEditProject = async () => {
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/update-project", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(modalData) });
-      const d = await res.json();
-      if (d.error) alert("저장 실패: " + d.error);
-      else { setModal(null); setModalData({}); fetchAll(); }
-    } catch (err) { alert("저장 실패: " + err.message); }
-    finally { setSubmitting(false); }
+
+  // í•  ì¼ DBëŠ” "ðŸ”´ ê¸´ê¸‰", ì§„í–‰ ì—…ë¬´ DBëŠ” "ðŸ”´ ì¦‰ì‹œ"
+  const priorityRank = {
+    "ðŸ”´ ì¦‰ì‹œ": 1,
+    "ðŸ”´ ê¸´ê¸‰": 1,
+    "ðŸŸ  ì´ë²ˆì£¼": 2,
+    "ðŸŸ¡ ì´ë²ˆë‹¬": 3,
+    "ðŸŸ¡ ë†’ìŒ": 2,
+    "ðŸŸ¢ ì¤‘ê°„": 3,
+    "ðŸ”µ ë‚®ìŒ": 4,
+    "âšª ì¶”ì ": 4,
   };
- 
-  const calcDDay = (dateStr) => { if (!dateStr) return null; const t = new Date(dateStr); t.setHours(0,0,0,0); return Math.round((t - today) / 86400000); };
-  const fmtAmount = (num) => { if (!num) return "0"; if (num >= 100000000) return `${(num/100000000).toFixed(2)}억`; if (num >= 10000) return `${Math.round(num/10000).toLocaleString("ko-KR")}만`; return num.toLocaleString("ko-KR"); };
-  const fmtDate = (dateStr) => { if (!dateStr) return ""; const d = new Date(dateStr); return `${d.getMonth()+1}/${d.getDate()}`; };
- 
-  const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(i => (i.title||"").toLowerCase().includes(q) || (i.vendor||"").toLowerCase().includes(q) || (i.category||"").toLowerCase().includes(q));
-  }, [items, searchQuery]);
- 
-  const todayMonth = today.toISOString().substring(0, 7);
-  const monthItems = filteredItems.filter(i => i.date && i.date.startsWith(todayMonth));
-  const monthDep = monthItems.filter(i => i.type === "입금").reduce((s,i) => s + (i.amount||0), 0);
-  const monthWd = monthItems.filter(i => i.type === "출금").reduce((s,i) => s + (i.amount||0), 0);
-  const monthNet = monthDep - monthWd;
-  const monthUpcomingDep = monthItems.filter(i => i.type === "입금" && i.status !== "완료" && calcDDay(i.date) >= 0).reduce((s,i) => s + (i.amount||0), 0);
-  const monthUpcomingWd = monthItems.filter(i => i.type === "출금" && i.status !== "완료" && calcDDay(i.date) >= 0).reduce((s,i) => s + (i.amount||0), 0);
- 
-  const missionTarget = 450000000;
-  const missionDate = useMemo(() => { const d = new Date("2026-06-15"); d.setHours(0,0,0,0); return d; }, []);
-  const missionDDay = Math.round((missionDate - today) / 86400000);
-  const missionPct = Math.min((monthDep / missionTarget) * 100, 100);
- 
-  const bucket = (min, max) => filteredItems.filter(i => { const d = calcDDay(i.date); return d !== null && d >= min && d <= max; }).sort((a,b) => new Date(a.date) - new Date(b.date));
-  const tomorrowBucket = bucket(1, 1);
-  const thisWeekBucket = bucket(2, 7);
-  const next15Bucket = bucket(8, 15);
- 
-  const calendar = useMemo(() => {
-    const year = today.getFullYear(); const month = today.getMonth();
-    const firstWeekday = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const eventsByDate = {};
-    items.forEach(item => {
-      if (!item.date) return;
-      const d = new Date(item.date);
-      if (d.getFullYear() === year && d.getMonth() === month) {
-        const day = d.getDate();
-        if (!eventsByDate[day]) eventsByDate[day] = [];
-        eventsByDate[day].push(item);
-      }
+
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // í•µì‹¬ ë°ì´í„° ê°€ê³µ
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+  // ì˜¤ëŠ˜ì˜ ê²°ì • â€” ðŸ”´ ì¦‰ì‹œ + ê°€ìž¥ ê°€ê¹Œìš´ ë§ˆê° 1ê±´
+  const heroDecision = useMemo(() => {
+    if (projects.length === 0) return null;
+    const urgent = projects.filter((p) => priorityRank[p.priority] === 1 && p.status !== "ì™„ë£Œ");
+    const pool = urgent.length > 0 ? urgent : projects.filter((p) => p.status !== "ì™„ë£Œ");
+    return [...pool].sort((a, b) => {
+      const da = a.deadline ? calcDDay(a.deadline) : 999;
+      const db = b.deadline ? calcDDay(b.deadline) : 999;
+      return da - db;
+    })[0];
+  }, [projects]);
+
+  // 3ê°œ ì•Œë¦¼
+  const alerts = useMemo(() => {
+    const heroId = heroDecision?.id;
+    return projects
+      .filter((p) => p.id !== heroId && p.status !== "ì™„ë£Œ" && p.deadline)
+      .sort((a, b) => {
+        const ra = priorityRank[a.priority] || 5;
+        const rb = priorityRank[b.priority] || 5;
+        if (ra !== rb) return ra - rb;
+        return calcDDay(a.deadline) - calcDDay(b.deadline);
+      })
+      .slice(0, 3);
+  }, [projects, heroDecision]);
+
+  // KPI â€” ì´ë²ˆ ì£¼
+  const weekStart = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - d.getDay());
+    return d;
+  }, [today]);
+  const weekEnd = useMemo(() => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + 6);
+    return d;
+  }, [weekStart]);
+
+  const thisWeekPayments = useMemo(() => {
+    return payments.filter((p) => {
+      if (!p.date) return false;
+      const d = new Date(p.date);
+      return d >= weekStart && d <= weekEnd;
     });
-    const cells = [];
-    for (let i = 0; i < firstWeekday; i++) cells.push(null);
-    for (let day = 1; day <= daysInMonth; day++) {
-      cells.push({ day, events: eventsByDate[day] || [], isToday: day === today.getDate(), date: `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}` });
+  }, [payments, weekStart, weekEnd]);
+
+  const weeklyInflow = thisWeekPayments
+    .filter((p) => p.type === "ìž…ê¸ˆ")
+    .reduce((s, p) => s + (p.amount || 0), 0);
+  const weeklyOutflow = thisWeekPayments
+    .filter((p) => p.type === "ì¶œê¸ˆ")
+    .reduce((s, p) => s + (p.amount || 0), 0);
+
+  const activeProjectsCount = projects.filter(
+    (p) => p.status === "ì§„í–‰ ì¤‘" || p.status === "ê²€í†  ì¤‘"
+  ).length;
+
+  const todayTaskCount = (todayData.tasks || []).filter((t) => t.status !== "ì™„ë£Œ").length;
+
+  // í”„ë¡œì íŠ¸ ì¹´ë“œ 6ê°œ
+  const topProjects = useMemo(() => {
+    return [...projects]
+      .filter((p) => p.status !== "ì™„ë£Œ")
+      .sort((a, b) => {
+        const ra = priorityRank[a.priority] || 5;
+        const rb = priorityRank[b.priority] || 5;
+        if (ra !== rb) return ra - rb;
+        const da = a.deadline ? calcDDay(a.deadline) : 999;
+        const db = b.deadline ? calcDDay(b.deadline) : 999;
+        return da - db;
+      })
+      .slice(0, 6);
+  }, [projects]);
+
+  // CFOR 12ì£¼
+  const cforWeeks = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < 12; i++) {
+      const wStart = new Date(weekStart);
+      wStart.setDate(wStart.getDate() + i * 7);
+      const wEnd = new Date(wStart);
+      wEnd.setDate(wEnd.getDate() + 6);
+      const wp = payments.filter((p) => {
+        if (!p.date) return false;
+        const d = new Date(p.date);
+        return d >= wStart && d <= wEnd;
+      });
+      const inflow = wp.filter((p) => p.type === "ìž…ê¸ˆ").reduce((s, p) => s + (p.amount || 0), 0);
+      const outflow = wp.filter((p) => p.type === "ì¶œê¸ˆ").reduce((s, p) => s + (p.amount || 0), 0);
+      const net = inflow - outflow;
+      result.push({
+        weekNum: getISOWeek(wStart),
+        net,
+        netMM: net / 1000000,
+        isCurrent: i === 0,
+      });
     }
-    // V6.7 — 6주 셀이 빈 NULL뿐이면 제거 (마지막 7개 모두 null 검사)
-    while (cells.length > 35 && cells.slice(-7).every(c => c === null)) cells.length -= 7;
-    return { cells, monthName: today.toLocaleDateString("ko-KR", { year: "numeric", month: "long" }) };
-  }, [items, today]);
- 
-  const iconFor = (item) => {
-    const t = (item.title||"").toLowerCase(); const v = (item.vendor||"").toLowerCase(); const c = item.category||"";
-    if (t.includes("자사몰") || v.includes("자사몰")) return "🛒";
-    if (t.includes("푸드메이커스") || v.includes("푸드메이커스")) return "🏭";
-    if (t.includes("스마트스토어")) return "🏪";
-    if (t.includes("롯데홈쇼핑") || t.includes("우리홈쇼핑")) return "📺";
-    if (t.includes("인스타") || t.includes("공구")) return "📣";
-    if (t.includes("소원상사")) return "📦";
-    if (t.includes("key-biz")) return "🔄";
-    if (t.includes("청년창업") || t.includes("정책자금")) return "🏛️";
-    if (t.includes("kb") || t.includes("하나카드") || t.includes("기업bc")) return "💳";
-    if (t.includes("임대료") || t.includes("관리비")) return "🏢";
-    if (t.includes("급여") || t.includes("곽영") || t.includes("4대보험")) return "👤";
-    if (t.includes("쿠콘") || t.includes("렌탈")) return "🖥️";
-    if (t.includes("텐밀리언") || t.includes("ppl") || t.includes("유튜")) return "🎬";
-    if (t.includes("마케팅")) return "📊";
-    if (t.includes("lgu") || t.includes("인터넷")) return "📡";
-    if (t.includes("cj") || t.includes("물류")) return "🚚";
-    if (t.includes("나이스") || t.includes("세무")) return "🧾";
-    if (c === "매출 정산") return "💰"; if (c === "대출 상환") return "🏦";
-    return "📌";
+    const maxAbs = Math.max(...result.map((w) => Math.abs(w.netMM)), 1);
+    return result.map((w) => ({
+      ...w,
+      height: Math.max(8, (Math.abs(w.netMM) / maxAbs) * 45),
+    }));
+  }, [payments, weekStart]);
+
+  const cfor12wTotal = cforWeeks.reduce((s, w) => s + w.netMM, 0);
+
+  // ì˜¤ëŠ˜ì˜ ìž‘ì€ í•  ì¼ (ðŸ”´ ê¸´ê¸‰ë§Œ)
+  const todayQuickTasks = useMemo(() => {
+    return (todayData.tasks || [])
+      .filter((t) => priorityRank[t.priority] === 1)
+      .slice(0, 5);
+  }, [todayData.tasks]);
+
+  // ìƒíƒœ í´ëž˜ìŠ¤Â·ë¼ë²¨
+  const statusClass = (s) => {
+    if (s === "ì§„í–‰ ì¤‘") return "status-active";
+    if (s === "ê²€í†  ì¤‘") return "status-active";
+    if (s === "ëŒ€ê¸° ì¤‘") return "status-wait";
+    if (s === "ë³´ë¥˜") return "status-risk";
+    return "status-wait";
   };
- 
-  // V6 — 압축형 항목 렌더 (한 줄에 빽빽이)
-  const renderItemCompact = (item) => {
-    const dday = calcDDay(item.date); const isIncome = item.type === "입금";
-    const isDone = item.status === "완료"; const isUpdating = updatingItems.has(item.id);
-    const ddayLabel = dday === 0 ? "오늘" : dday === 1 ? "내일" : `D-${dday}`;
-    const ddayColor = dday <= 1 ? "#ef4444" : dday <= 3 ? "#f59e0b" : "#94a3b8";
-    return (
-      <div key={item.id} style={{ ...s.itemCompact, borderLeft: `3px solid ${isIncome ? "#10b981" : "#ef4444"}`, opacity: isDone ? 0.4 : 1 }}>
-        <input type="checkbox" checked={isDone} onChange={() => toggleComplete(item)} disabled={isUpdating} style={s.checkbox} />
-        <div style={s.itemCompactIcon}>{iconFor(item)}</div>
-        <div style={s.itemCompactMain}>
-          <div style={{ ...s.itemCompactTitle, textDecoration: isDone ? "line-through" : "none", color: isDone ? "#94a3b8" : "#0f172a" }}>{item.title}</div>
-          <div style={s.itemCompactMeta}>
-            <span style={{ color: ddayColor, fontWeight: 700 }}>{ddayLabel}</span>
-            <span style={s.itemDot}>·</span><span>{fmtDate(item.date)}</span>
-            {item.vendor && (<><span style={s.itemDot}>·</span><span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.vendor}</span></>)}
-          </div>
-        </div>
-        <div style={{ ...s.itemCompactAmount, color: isDone ? "#94a3b8" : isIncome ? "#10b981" : "#ef4444", textDecoration: isDone ? "line-through" : "none" }}>
-          {isIncome ? "+" : "−"}{fmtAmount(item.amount)}
-        </div>
-      </div>
-    );
+  const statusLabel = (s) => {
+    if (s === "ì§„í–‰ ì¤‘") return "ACTIVE";
+    if (s === "ê²€í†  ì¤‘") return "REVIEW";
+    if (s === "ëŒ€ê¸° ì¤‘") return "WAIT";
+    if (s === "ë³´ë¥˜") return "RISK";
+    if (s === "ì™„ë£Œ") return "DONE";
+    return "â€”";
   };
- 
-  const renderBucketBox = (title, list, emoji, accentColor) => {
-    const dep = list.filter(i => i.type === "입금").reduce((sum,i) => sum + (i.amount||0), 0);
-    const wd = list.filter(i => i.type === "출금").reduce((sum,i) => sum + (i.amount||0), 0);
-    return (
-      <section style={s.bucketBox}>
-        <div style={s.bucketHeader}>
-          <div style={s.bucketTitle}>
-            <span style={{ ...s.bucketDot, backgroundColor: accentColor }} />
-            <span style={s.bucketTitleText}>{emoji} {title}</span>
-            <span style={s.bucketCount}>{list.length}</span>
-          </div>
-          <div style={s.bucketSummary}>
-            {dep > 0 && <span style={{ color: "#10b981", fontWeight: 700 }}>+{fmtAmount(dep)}</span>}
-            {wd > 0 && <span style={{ color: "#ef4444", fontWeight: 700 }}>−{fmtAmount(wd)}</span>}
-          </div>
-        </div>
-        {list.length === 0 ? (<div style={s.bucketEmpty}>일정 없음</div>) : (<div style={s.bucketList}>{list.map(renderItemCompact)}</div>)}
-      </section>
-    );
+  const projectProgress = (p) => {
+    if (p.status === "ì™„ë£Œ") return 100;
+    if (p.status === "ë³´ë¥˜") return 30;
+    if (p.status === "ëŒ€ê¸° ì¤‘") return 25;
+    if (p.status === "ê²€í†  ì¤‘") return 60;
+    if (p.status === "ì§„í–‰ ì¤‘") return 75;
+    return 50;
   };
- 
-  const categoryColor = { "해외 진출": "#3b82f6", "국내 B2B": "#10b981", "매장": "#f97316", "신규 SKU": "#a855f7", "공급사": "#ec4899", "운영": "#eab308", "기타": "#64748b" };
-  const statusColor = { "진행 중": "#10b981", "검토 중": "#eab308", "대기 중": "#94a3b8", "완료": "#3b82f6", "보류": "#ef4444" };
- 
-  const renderProject = (p) => (
-    <div key={p.id} style={s.projectCard} onClick={() => { setModalData({ pageId: p.id, ...p }); setModal("edit-project"); }}>
-      <div style={s.projectHeader}>
-        <div style={s.projectTitle}>{p.title}</div>
-        {p.priority && <div style={s.projectPriority}>{p.priority}</div>}
-      </div>
-      <div style={s.projectBadges}>
-        <span style={{ ...s.projectBadge, backgroundColor: categoryColor[p.category] || "#64748b" }}>{p.category}</span>
-        <span style={{ ...s.projectStatus, color: statusColor[p.status] || "#64748b", borderColor: statusColor[p.status] || "#64748b" }}>● {p.status}</span>
-      </div>
-      {p.nextAction && <div style={s.projectNext}>→ {p.nextAction}</div>}
-    </div>
-  );
- 
-  const renderHeroToday = () => {
-    const safe = todayData || { payments: [], tasks: [], deadlines: [] };
-    const { payments, tasks, deadlines } = safe;
- 
-    // V6.3 — 시간 추출 (제목에서 "9시", "11시 30분" 같은 패턴)
-    const extractTime = (title) => {
-      const m = (title || "").match(/(\d{1,2})시(?:\s*(\d{1,2})분)?/);
-      if (!m) return null;
-      return m[2] ? `${m[1]}:${m[2].padStart(2, "0")}` : `${m[1]}시`;
-    };
- 
-    // V6.3 — 메모에서 자동/이월 칩 추출
-    const extractChips = (memo) => {
-      if (!memo) return [];
-      const chips = [];
-      if (memo.includes("[결제 자동]") || memo.includes("[진행업무 자동]")) chips.push({ label: "🤖 자동", color: "rgba(59,130,246,0.85)" });
-      if (memo.includes("[어제 이월]")) chips.push({ label: "⏭️ 어제 이월", color: "rgba(245,158,11,0.85)" });
-      return chips;
-    };
- 
-    // V6.3 — 카테고리별 그룹핑 (현금 흐름 우선 순서)
-    const categoryOrder = ["자금", "영업", "거래처", "생산", "제품", "마케팅", "인증규제", "HR", "기타"];
-    const categoryIcons = { "자금": "💰", "영업": "🏪", "거래처": "🤝", "생산": "🏭", "제품": "📦", "마케팅": "📣", "인증규제": "📋", "HR": "👥", "기타": "📌" };
-    const tasksByCategory = {};
-    tasks.forEach(t => {
-      const cat = t.category || "기타";
-      if (!tasksByCategory[cat]) tasksByCategory[cat] = [];
-      tasksByCategory[cat].push(t);
-    });
- 
-    // V6.3 — 통계 (예정/완료/이월/자동)
-    const totalTasks = tasks.length;
-    const doneTasks = tasks.filter(t => t.status === "완료").length;
-    const pendingTasks = totalTasks - doneTasks;
-    const carriedOver = tasks.filter(t => t.memo && t.memo.includes("[어제 이월]")).length;
-    const autoCreated = tasks.filter(t => t.memo && (t.memo.includes("[결제 자동]") || t.memo.includes("[진행업무 자동]"))).length;
- 
-    return (
-      <section style={s.heroToday}>
-        <div style={s.heroHeader}>
-          <div>
-            <div style={s.heroTitle}>🔥 오늘 — {todayStr}</div>
-            <div style={s.heroSubtitle}>
-              할 일 {pendingTasks}건 진행 중 · 완료 {doneTasks}건 · 어제 이월 {carriedOver}건 · 🤖 자동 박힌 항목 {autoCreated}건
-            </div>
-          </div>
-          <div style={s.heroDday}>D-{missionDDay} · 6/15 미션 {missionPct.toFixed(0)}%</div>
-        </div>
- 
-        <div style={s.heroGrid}>
-          {/* ━━━ 💰 결제 컬럼 — 시간순 (예정 위, 완료 아래) ━━━ */}
-          <div style={s.heroCol}>
-            <div style={s.heroColTitle}>💰 오늘 결제 ({payments.length})</div>
-            {payments.length === 0 ? <div style={s.heroEmpty}>없음</div> : payments.map(p => (
-              <div key={p.id} style={s.heroItem}>
-                <div style={s.heroItemRow}>
-                  <span style={{ ...s.heroAmt, color: p.type === "입금" ? "#16a34a" : "#dc2626" }}>
-                    {p.type === "입금" ? "+" : "−"}{fmtAmount(p.amount)}
-                  </span>
-                  <span style={s.heroItemTitle}>{p.title}</span>
-                </div>
-                {p.vendor && <div style={s.heroSub}>{p.vendor}</div>}
-              </div>
-            ))}
-          </div>
- 
-          {/* ━━━ ✅ 할 일 컬럼 — 카테고리 그룹 + 체크박스 + 칩 + 시간 ━━━ */}
-          <div style={s.heroCol}>
-            <div style={s.heroColTitle}>✅ 오늘 할 일 ({pendingTasks} / {totalTasks})</div>
-            {tasks.length === 0 ? <div style={s.heroEmpty}>없음</div> :
-              categoryOrder.filter(cat => tasksByCategory[cat]).map(cat => (
-                <div key={cat} style={s.heroCategorySection}>
-                  <div style={s.heroCategoryHeader}>
-                    {categoryIcons[cat] || "📌"} {cat} ({tasksByCategory[cat].length})
-                  </div>
-                  <div style={s.heroCategoryGrid}>
-                  {tasksByCategory[cat].map(t => {
-                    const isDone = t.status === "완료";
-                    const isUpdating = updatingItems.has(t.id);
-                    const time = extractTime(t.title);
-                    const chips = extractChips(t.memo);
-                    const displayTitle = t.title.replace(/^(\d{1,2})시(?:\s*\d{1,2}분)?\s*/, "");
-                    return (
-                      <div key={t.id} style={s.heroTaskItem}>
-                        <input
-                          type="checkbox"
-                          checked={isDone}
-                          disabled={isUpdating}
-                          onChange={() => toggleComplete({ id: t.id, status: t.status })}
-                          style={s.heroCheckbox}
-                        />
-                        <div style={s.heroTaskBody}>
-                          <div style={s.heroTaskTopRow}>
-                            {time && <span style={s.heroTimeBadge}>{time}</span>}
-                            {t.priority && <span style={s.heroPriority}>{t.priority}</span>}
-                            <span style={{ ...s.heroTaskTitle, textDecoration: isDone ? "line-through" : "none", opacity: isDone ? 0.5 : 1 }}>
-                              {displayTitle || t.title}
-                            </span>
-                          </div>
-                          {chips.length > 0 && (
-                            <div style={s.heroChipRow}>
-                              {chips.map((c, i) => (
-                                <span key={i} style={{ ...s.heroChip, background: c.color }}>{c.label}</span>
-                              ))}
-                            </div>
-                          )}
-                          {t.relatedTo && <div style={s.heroSubMeta}>→ {t.relatedTo}</div>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  </div>
-                </div>
-              ))
-            }
-          </div>
- 
-          {/* ━━━ 🚧 마감 업무 컬럼 ━━━ */}
-          <div style={s.heroCol}>
-            <div style={s.heroColTitle}>🚧 오늘 마감 업무 ({deadlines.length})</div>
-            {deadlines.length === 0 ? <div style={s.heroEmpty}>없음</div> : deadlines.map(d => (
-              <div key={d.id} style={s.heroItem}>
-                <div style={s.heroItemRow}>
-                  {d.priority && <span style={s.heroPriority}>{d.priority}</span>}
-                  <span style={s.heroItemTitle}>{d.title}</span>
-                </div>
-                {d.nextAction && <div style={s.heroSub}>→ {d.nextAction}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
+  const progressBg = (p) => {
+    if (p.status === "ë³´ë¥˜") return "#9E3F2D";
+    if (p.status === "ëŒ€ê¸° ì¤‘") return "#8C6A24";
+    return "#1E4A38";
   };
- 
+
+  const tagForPriority = (priority) => {
+    if (priorityRank[priority] === 1) return { cls: "urgent", label: "ê¸´ê¸‰" };
+    if (priorityRank[priority] === 2) return { cls: "review", label: "ê²€í† " };
+    return { cls: "decide", label: "ê²°ì •" };
+  };
+
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // ë Œë”
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   return (
-    <div style={s.container}>
-      <div style={s.inner}>
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        {/* 헤더 — 슬림 / 타이틀 + 검색 + 액션 버튼 한 줄                    */}
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <header style={s.topbar}>
-          <div style={s.topbarLeft}>
-            <h1 style={s.title}>🎯 앙투어솔레 CEO SAAS</h1>
-            <div style={s.date}>{todayStr}</div>
+    <>
+      <Head>
+        <title>An TÃºr Solais â€” CEO Console</title>
+        <meta charSet="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=JetBrains+Mono:wght@400;500;600&display=swap"
+          rel="stylesheet"
+        />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+      </Head>
+
+      <style jsx global>{`
+        :root {
+          --paper: #f6f2ea;
+          --paper-2: #efe9dd;
+          --ink: #18170f;
+          --ink-soft: #45413a;
+          --ink-mute: #8a8579;
+          --rule: #d9d2c2;
+          --rule-soft: #e6dfcd;
+          --emerald: #1e4a38;
+          --emerald-deep: #133326;
+          --gold: #8c6a24;
+          --brick: #9e3f2d;
+          --brick-soft: #c7715e;
+          --moss: #5c6a3c;
+          --serif: "Fraunces", "Noto Serif KR", serif;
+          --sans: "Pretendard Variable", Pretendard, -apple-system, sans-serif;
+          --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+        }
+        * {
+          box-sizing: border-box;
+        }
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+          background: var(--paper);
+          color: var(--ink);
+          font-family: var(--sans);
+          -webkit-font-smoothing: antialiased;
+          text-rendering: optimizeLegibility;
+        }
+        body::before {
+          content: "";
+          position: fixed;
+          inset: 0;
+          z-index: 0;
+          background-image: radial-gradient(circle at 15% 20%, rgba(30, 74, 56, 0.04), transparent 40%),
+            radial-gradient(circle at 85% 80%, rgba(140, 106, 36, 0.05), transparent 45%);
+          pointer-events: none;
+        }
+        .container {
+          position: relative;
+          z-index: 1;
+          max-width: 1320px;
+          margin: 0 auto;
+          padding: 36px 48px 80px;
+        }
+        .masthead {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          padding-bottom: 22px;
+          border-bottom: 2px solid var(--ink);
+          margin-bottom: 28px;
+        }
+        .masthead-left {
+          display: flex;
+          align-items: baseline;
+          gap: 18px;
+        }
+        .wordmark {
+          font-family: var(--serif);
+          font-weight: 500;
+          font-size: 34px;
+          letter-spacing: -0.02em;
+          line-height: 1;
+          font-style: italic;
+        }
+        .wordmark-sub {
+          font-family: var(--serif);
+          font-size: 13px;
+          font-weight: 400;
+          color: var(--ink-mute);
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          padding-bottom: 4px;
+        }
+        .masthead-right {
+          display: flex;
+          gap: 28px;
+          align-items: flex-end;
+          font-size: 12px;
+          color: var(--ink-soft);
+          letter-spacing: 0.05em;
+        }
+        .meta-item {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+        .meta-label {
+          font-size: 10px;
+          color: var(--ink-mute);
+          text-transform: uppercase;
+          letter-spacing: 0.15em;
+        }
+        .meta-value {
+          font-family: var(--mono);
+          font-size: 13px;
+          color: var(--ink);
+        }
+        .hero {
+          display: grid;
+          grid-template-columns: 1.6fr 1fr;
+          gap: 0;
+          margin-bottom: 44px;
+          border: 1px solid var(--ink);
+          background: var(--paper-2);
+        }
+        .hero-primary {
+          padding: 30px 34px 28px;
+          border-right: 1px solid var(--ink);
+          position: relative;
+          background: linear-gradient(135deg, rgba(158, 63, 45, 0.04), transparent 60%);
+        }
+        .hero-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--brick);
+          margin-bottom: 14px;
+        }
+        .hero-badge::before {
+          content: "";
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--brick);
+          box-shadow: 0 0 0 4px rgba(158, 63, 45, 0.15);
+          animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 0 0 4px rgba(158, 63, 45, 0.15); }
+          50% { box-shadow: 0 0 0 8px rgba(158, 63, 45, 0.05); }
+        }
+        .hero-title {
+          font-family: var(--serif);
+          font-size: 26px;
+          font-weight: 500;
+          line-height: 1.3;
+          letter-spacing: -0.015em;
+          margin: 0 0 10px;
+          color: var(--ink);
+        }
+        .hero-title em {
+          font-style: italic;
+          color: var(--brick);
+        }
+        .hero-desc {
+          font-size: 14px;
+          line-height: 1.65;
+          color: var(--ink-soft);
+          margin-bottom: 18px;
+          max-width: 580px;
+        }
+        .hero-countdown {
+          display: flex;
+          align-items: baseline;
+          gap: 16px;
+          padding: 14px 0;
+          border-top: 1px dashed var(--rule);
+          border-bottom: 1px dashed var(--rule);
+          margin-bottom: 16px;
+        }
+        .countdown-big {
+          font-family: var(--mono);
+          font-weight: 600;
+          font-size: 44px;
+          color: var(--brick);
+          line-height: 1;
+          letter-spacing: -0.02em;
+        }
+        .countdown-unit {
+          font-family: var(--serif);
+          font-style: italic;
+          font-size: 16px;
+          color: var(--ink-mute);
+        }
+        .countdown-target {
+          font-size: 12px;
+          color: var(--ink-soft);
+          margin-left: auto;
+        }
+        .countdown-target b {
+          font-family: var(--mono);
+          color: var(--ink);
+          font-weight: 500;
+        }
+        .hero-actions {
+          display: flex;
+          gap: 10px;
+        }
+        .btn {
+          padding: 9px 16px;
+          font-size: 12px;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          border: 1px solid var(--ink);
+          background: var(--ink);
+          color: var(--paper);
+          cursor: pointer;
+          transition: all 0.18s ease;
+          font-family: var(--sans);
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+        }
+        .btn:hover {
+          background: var(--paper);
+          color: var(--ink);
+        }
+        .btn.ghost {
+          background: transparent;
+          color: var(--ink);
+        }
+        .btn.ghost:hover {
+          background: var(--ink);
+          color: var(--paper);
+        }
+        .hero-secondary {
+          padding: 24px 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+        }
+        .alert-item {
+          padding: 14px 0;
+          border-bottom: 1px solid var(--rule-soft);
+          display: flex;
+          gap: 14px;
+          align-items: flex-start;
+        }
+        .alert-item:last-child {
+          border-bottom: none;
+          padding-bottom: 0;
+        }
+        .alert-item:first-child {
+          padding-top: 0;
+        }
+        .alert-marker {
+          font-family: var(--serif);
+          font-style: italic;
+          font-size: 13px;
+          color: var(--ink-mute);
+          padding-top: 1px;
+          min-width: 22px;
+        }
+        .alert-content {
+          flex: 1;
+        }
+        .alert-title {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--ink);
+          margin-bottom: 3px;
+          line-height: 1.35;
+        }
+        .alert-sub {
+          font-size: 11.5px;
+          color: var(--ink-mute);
+          line-height: 1.5;
+        }
+        .alert-tag {
+          display: inline-block;
+          font-size: 9.5px;
+          font-weight: 600;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          padding: 2px 6px;
+          margin-left: 6px;
+          color: var(--paper);
+        }
+        .alert-tag.urgent { background: var(--brick); }
+        .alert-tag.review { background: var(--gold); }
+        .alert-tag.decide { background: var(--emerald); }
+        .section-rule {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin: 0 0 22px;
+        }
+        .section-rule-num {
+          font-family: var(--serif);
+          font-style: italic;
+          font-size: 14px;
+          color: var(--ink-mute);
+        }
+        .section-rule-title {
+          font-family: var(--serif);
+          font-size: 21px;
+          font-weight: 400;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+        }
+        .section-rule-title em {
+          font-style: italic;
+          color: var(--emerald);
+        }
+        .section-rule-line {
+          flex: 1;
+          height: 1px;
+          background: var(--rule);
+        }
+        .section-rule-meta {
+          font-size: 11px;
+          color: var(--ink-mute);
+          font-family: var(--mono);
+          letter-spacing: 0.05em;
+        }
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 0;
+          margin-bottom: 52px;
+          border: 1px solid var(--ink);
+        }
+        .kpi {
+          padding: 24px 22px 22px;
+          border-right: 1px solid var(--rule);
+          position: relative;
+          min-height: 168px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          transition: background 0.2s ease;
+        }
+        .kpi:last-child { border-right: none; }
+        .kpi:hover { background: var(--paper-2); }
+        .kpi-label {
+          font-size: 10.5px;
+          font-weight: 600;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--ink-mute);
+          margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .kpi-period {
+          font-family: var(--mono);
+          font-size: 9.5px;
+          color: var(--ink-mute);
+          font-weight: 400;
+          letter-spacing: 0.05em;
+        }
+        .kpi-value {
+          font-family: var(--serif);
+          font-weight: 500;
+          font-size: 36px;
+          line-height: 1;
+          letter-spacing: -0.025em;
+          color: var(--ink);
+          margin-bottom: 4px;
+        }
+        .kpi-value-unit {
+          font-size: 16px;
+          color: var(--ink-mute);
+          font-weight: 400;
+          margin-left: 2px;
+          font-style: italic;
+        }
+        .kpi-context {
+          font-size: 11px;
+          color: var(--ink-soft);
+          margin-top: 10px;
+          line-height: 1.5;
+          font-style: italic;
+        }
+        .project-board {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+          margin-bottom: 48px;
+        }
+        .project-card {
+          background: var(--paper-2);
+          border: 1px solid var(--rule);
+          padding: 20px 22px 18px;
+          position: relative;
+          transition: all 0.2s ease;
+        }
+        .project-card:hover {
+          border-color: var(--ink);
+          transform: translateY(-2px);
+          box-shadow: 6px 6px 0 var(--rule-soft);
+        }
+        .project-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 12px;
+        }
+        .project-title {
+          font-family: var(--serif);
+          font-size: 17px;
+          font-weight: 500;
+          line-height: 1.3;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+          max-width: 70%;
+          margin: 0;
+        }
+        .project-status {
+          font-size: 9.5px;
+          font-weight: 600;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          padding: 3px 7px;
+          border: 1px solid;
+          white-space: nowrap;
+        }
+        .status-active {
+          color: var(--emerald);
+          border-color: var(--emerald);
+          background: rgba(30, 74, 56, 0.05);
+        }
+        .status-wait {
+          color: var(--gold);
+          border-color: var(--gold);
+          background: rgba(140, 106, 36, 0.05);
+        }
+        .status-risk {
+          color: var(--brick);
+          border-color: var(--brick);
+          background: rgba(158, 63, 45, 0.05);
+        }
+        .project-next {
+          font-size: 12.5px;
+          color: var(--ink-soft);
+          line-height: 1.55;
+          margin-bottom: 14px;
+          padding-bottom: 14px;
+          border-bottom: 1px dashed var(--rule);
+        }
+        .project-next b {
+          color: var(--ink);
+          font-weight: 500;
+        }
+        .project-meta {
+          display: flex;
+          justify-content: space-between;
+          font-size: 11px;
+          color: var(--ink-mute);
+        }
+        .project-due {
+          font-family: var(--mono);
+          color: var(--ink);
+          font-weight: 500;
+        }
+        .project-due.imminent {
+          color: var(--brick);
+        }
+        .project-progress {
+          height: 2px;
+          background: var(--rule);
+          margin-top: 12px;
+          position: relative;
+          overflow: hidden;
+        }
+        .project-progress-fill {
+          height: 100%;
+          transition: width 0.6s ease;
+        }
+        .cfor-strip {
+          background: var(--ink);
+          color: var(--paper);
+          padding: 22px 28px;
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: 32px;
+          align-items: center;
+          margin-bottom: 36px;
+        }
+        .cfor-label {
+          font-family: var(--serif);
+          font-style: italic;
+          font-size: 16px;
+        }
+        .cfor-label small {
+          display: block;
+          font-family: var(--sans);
+          font-style: normal;
+          font-size: 10px;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(246, 242, 234, 0.55);
+          margin-bottom: 2px;
+        }
+        .cfor-weeks {
+          display: flex;
+          gap: 4px;
+          align-items: flex-end;
+          height: 50px;
+        }
+        .week-bar {
+          flex: 1;
+          background: rgba(246, 242, 234, 0.15);
+          position: relative;
+          transition: background 0.2s ease;
+          cursor: pointer;
+          min-height: 4px;
+        }
+        .week-bar:hover {
+          background: rgba(246, 242, 234, 0.35);
+        }
+        .week-bar.positive {
+          background: rgba(120, 180, 140, 0.55);
+        }
+        .week-bar.negative {
+          background: rgba(200, 113, 94, 0.65);
+        }
+        .week-bar.current {
+          outline: 1px solid var(--paper);
+          outline-offset: 2px;
+        }
+        .cfor-summary {
+          text-align: right;
+          font-family: var(--mono);
+        }
+        .cfor-summary-big {
+          font-size: 18px;
+          font-weight: 500;
+          line-height: 1;
+          margin-bottom: 4px;
+        }
+        .cfor-summary-small {
+          font-size: 10px;
+          color: rgba(246, 242, 234, 0.6);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .footer-grid {
+          display: grid;
+          grid-template-columns: 1.4fr 1fr;
+          gap: 28px;
+        }
+        .footer-block {
+          border-top: 1px solid var(--ink);
+          padding-top: 18px;
+        }
+        .footer-title {
+          font-family: var(--serif);
+          font-style: italic;
+          font-size: 14px;
+          color: var(--ink-mute);
+          margin-bottom: 14px;
+        }
+        .quick-item {
+          display: flex;
+          gap: 12px;
+          padding: 8px 0;
+          font-size: 13px;
+          align-items: center;
+          border-bottom: 1px solid var(--rule-soft);
+        }
+        .quick-item:last-child { border-bottom: none; }
+        .quick-check {
+          width: 14px;
+          height: 14px;
+          border: 1.5px solid var(--ink);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          cursor: pointer;
+          transition: all 0.15s;
+          font-size: 10px;
+          line-height: 1;
+        }
+        .quick-check.done {
+          background: var(--ink);
+          color: var(--paper);
+        }
+        .quick-text {
+          flex: 1;
+          color: var(--ink-soft);
+          line-height: 1.4;
+        }
+        .quick-text.done {
+          text-decoration: line-through;
+          color: var(--ink-mute);
+        }
+        .quick-cat {
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--ink-mute);
+          letter-spacing: 0.05em;
+        }
+        .insight-card {
+          background: var(--paper-2);
+          padding: 18px 20px;
+          border-left: 3px solid var(--emerald);
+        }
+        .insight-label {
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--emerald);
+          margin-bottom: 8px;
+        }
+        .insight-text {
+          font-family: var(--serif);
+          font-size: 14.5px;
+          line-height: 1.6;
+          color: var(--ink);
+          font-style: italic;
+          margin: 0;
+        }
+        .insight-text strong {
+          font-style: normal;
+          font-weight: 600;
+          color: var(--emerald-deep);
+        }
+        .colophon {
+          text-align: center;
+          margin-top: 60px;
+          padding-top: 24px;
+          border-top: 1px solid var(--rule);
+          font-family: var(--serif);
+          font-style: italic;
+          font-size: 12px;
+          color: var(--ink-mute);
+        }
+        .colophon-rule {
+          letter-spacing: 0.3em;
+          font-size: 10px;
+          text-transform: uppercase;
+          font-style: normal;
+          margin-bottom: 6px;
+          color: var(--ink);
+        }
+        .loading-state, .error-state {
+          padding: 80px 20px;
+          text-align: center;
+          font-family: var(--serif);
+          font-style: italic;
+          color: var(--ink-mute);
+        }
+        .error-state { color: var(--brick); }
+        @media (max-width: 900px) {
+          .container { padding: 24px 20px 60px; }
+          .hero { grid-template-columns: 1fr; }
+          .hero-primary { border-right: none; border-bottom: 1px solid var(--ink); }
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .kpi:nth-child(2) { border-right: none; }
+          .kpi:nth-child(-n+2) { border-bottom: 1px solid var(--rule); }
+          .project-board { grid-template-columns: 1fr; }
+          .cfor-strip { grid-template-columns: 1fr; gap: 16px; }
+          .cfor-summary { text-align: left; }
+          .footer-grid { grid-template-columns: 1fr; }
+          .masthead { flex-direction: column; align-items: flex-start; gap: 12px; }
+          .masthead-right { flex-wrap: wrap; gap: 18px; }
+        }
+      `}</style>
+
+      <div className="container">
+        {/* â”â”â” MASTHEAD â”â”â” */}
+        <header className="masthead">
+          <div className="masthead-left">
+            <div className="wordmark">An TÃºr Solais</div>
+            <div className="wordmark-sub">CEO Console Â· ê¹€ë¯¼ìž¬</div>
           </div>
-          <div style={s.topbarRight}>
-            <div style={s.searchBox}>
-              <input type="text" placeholder="🔍 거래처·제목·카테고리..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={s.searchInput} />
-              {searchQuery && <span style={s.searchCount}>{filteredItems.length}건</span>}
+          <div className="masthead-right">
+            <div className="meta-item">
+              <span className="meta-label">Date</span>
+              <span className="meta-value">{dateLabel}</span>
             </div>
-            <button style={s.iconBtn} onClick={() => setModal("memo")} title="빠른 메모">📝</button>
-            <button style={s.iconBtn} onClick={() => { setModalData({ date: today.toISOString().substring(0,10), title: "", amount: 0, type: "출금" }); setModal("add-payment"); }} title="새 일정 추가">➕</button>
-            <button style={s.iconBtn} onClick={fetchAll} title="새로고침">🔄</button>
+            <div className="meta-item">
+              <span className="meta-label">Week</span>
+              <span className="meta-value">W{currentWeek} / 52</span>
+            </div>
+            <div className="meta-item">
+              <span className="meta-label">FY Day</span>
+              <span className="meta-value">{dayOfYear} / 365</span>
+            </div>
           </div>
         </header>
- 
-        {loading && <div style={s.loading}>노션에서 데이터 불러오는 중...</div>}
-        {error && <div style={s.error}>⚠️ 오류: {error}</div>}
- 
+
+        {loading && <div className="loading-state">ë…¸ì…˜ ë°ì´í„° ë¶ˆëŸ¬ì˜¤ëŠ” ì¤‘â€¦</div>}
+        {error && <div className="error-state">âš  ë°ì´í„° ì˜¤ë¥˜: {error}</div>}
+
         {!loading && !error && (
           <>
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            {/* 1단 — 좌(🔥 오늘) / 우(📅 캘린더) 가로 분할                  */}
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div style={s.row1}>
-              <div style={s.row1Left}>
-                {renderHeroToday()}
-              </div>
-              <div style={s.row1Right}>
-                <section style={s.calendarSection}>
-                  <div style={s.sectionHeaderSlim}>
-                    <div style={s.sectionTitleSmall}><span>📅</span><span>{calendar.monthName}</span></div>
-                    <span style={s.calendarHint}>날짜 클릭 → 일정 추가</span>
+            {/* â”â”â” HERO: TODAY'S DECISION â”â”â” */}
+            {heroDecision && (
+              <section className="hero">
+                <div className="hero-primary">
+                  <div className="hero-badge">Today's One Decision</div>
+                  <h1 className="hero-title">{heroDecision.title}</h1>
+                  <p className="hero-desc">
+                    {heroDecision.nextAction || heroDecision.progress || "ë‹¤ìŒ ì•¡ì…˜ì„ ë…¸ì…˜ ì§„í–‰ ì—…ë¬´ DBì— ì ì–´ì£¼ì„¸ìš”."}
+                  </p>
+                  <div className="hero-countdown">
+                    <span className="countdown-big">
+                      {heroDecision.deadline ? Math.abs(calcDDay(heroDecision.deadline)) : "â€”"}
+                    </span>
+                    <span className="countdown-unit">
+                      {heroDecision.deadline
+                        ? calcDDay(heroDecision.deadline) >= 0
+                          ? "days remaining"
+                          : "days overdue"
+                        : "no deadline"}
+                    </span>
+                    {heroDecision.deadline && (
+                      <span className="countdown-target">
+                        to <b>{heroDecision.deadline}</b>
+                      </span>
+                    )}
                   </div>
-                  <div style={s.calendarBig}>
-                    <div style={s.calendarHeader}>
-                      {["일","월","화","수","목","금","토"].map(d => (<div key={d} style={s.calendarDay}>{d}</div>))}
-                    </div>
-                    <div style={s.calendarGridBig}>
-                      {calendar.cells.map((cell, idx) => (
-                        <div key={idx} style={{ ...s.calendarCellBig, backgroundColor: cell?.isToday ? "#eff6ff" : cell ? "#fff" : "transparent", borderColor: cell?.isToday ? "#3b82f6" : "#f1f5f9", cursor: cell ? "pointer" : "default" }}
-                          onClick={() => { if (cell) { setModalData({ date: cell.date, title: "", amount: 0, type: "출금" }); setModal("add-payment"); } }}>
-                          {cell && (
-                            <>
-                              <div style={{ ...s.calendarDayNum, color: cell.isToday ? "#1e40af" : "#0f172a", fontWeight: cell.isToday ? 800 : 600 }}>{cell.day}</div>
-                              <div style={s.calendarEvents}>
-                                {cell.events.slice(0, 3).map(ev => {
-                                  const inc = ev.type === "입금"; const done = ev.status === "완료";
-                                  return (
-                                    <div key={ev.id} style={{ ...s.calendarEvent, backgroundColor: inc ? "#dcfce7" : "#fee2e2", color: inc ? "#166534" : "#991b1b", textDecoration: done ? "line-through" : "none", opacity: done ? 0.5 : 1 }} title={`${ev.title} · ${fmtAmount(ev.amount)}`}>
-                                      {inc ? "+" : "−"}{fmtAmount(ev.amount)} {ev.title.slice(0, 7)}
-                                    </div>
-                                  );
-                                })}
-                                {cell.events.length > 3 && <div style={s.calendarMore}>+{cell.events.length - 3}건</div>}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              </div>
-            </div>
- 
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            {/* 2단 — 진행 중인 업무 (가로 전체 / 3열 압축)                  */}
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <section style={s.section}>
-              <div style={s.sectionHeaderSlim}>
-                <div style={s.sectionTitleSmall}><span>🚧</span><span>진행 중인 업무</span><span style={s.sectionCount}>{projects.length}</span></div>
-                <span style={s.calendarHint}>카드 클릭 → 업데이트</span>
-              </div>
-              <div style={s.projectGridV6}>
-                {projects.length === 0 ? (<div style={s.emptyState}>진행 중인 업무 없음</div>) : projects.map(renderProject)}
-              </div>
-            </section>
- 
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            {/* 3단 — 4박스 가로 분할 (내일 · 이번주 · D-15 · 자금)           */}
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div style={s.row3}>
-              {renderBucketBox("내일", tomorrowBucket, "⏰", "#f59e0b")}
-              {renderBucketBox("이번 주", thisWeekBucket, "📅", "#3b82f6")}
-              {renderBucketBox("D-15 이내", next15Bucket, "📌", "#a855f7")}
-              <section style={s.bucketBox}>
-                <div style={s.bucketHeader}>
-                  <div style={s.bucketTitle}>
-                    <span style={{ ...s.bucketDot, backgroundColor: "#10b981" }} />
-                    <span style={s.bucketTitleText}>💰 이번 달 자금</span>
+                  <div className="hero-actions">
+                    {heroDecision.url && (
+                      <a className="btn" href={heroDecision.url} target="_blank" rel="noreferrer">
+                        ë…¸ì…˜ì—ì„œ ì—´ê¸°
+                      </a>
+                    )}
+                    <button className="btn ghost" onClick={() => window.location.reload()}>
+                      ìƒˆë¡œê³ ì¹¨
+                    </button>
                   </div>
                 </div>
-                <div style={s.fundList}>
-                  <div style={s.fundRow}>
-                    <span style={s.fundLabel}>입금</span>
-                    <span style={{ ...s.fundValue, color: "#10b981" }}>+{fmtAmount(monthDep)}</span>
-                  </div>
-                  <div style={s.fundRow}>
-                    <span style={s.fundLabel}>출금</span>
-                    <span style={{ ...s.fundValue, color: "#ef4444" }}>−{fmtAmount(monthWd)}</span>
-                  </div>
-                  <div style={s.fundDiv} />
-                  <div style={s.fundRow}>
-                    <span style={s.fundLabel}>순흐름</span>
-                    <span style={{ ...s.fundValue, color: monthNet >= 0 ? "#3b82f6" : "#f97316", fontSize: 16 }}>
-                      {monthNet >= 0 ? "+" : ""}{fmtAmount(monthNet)}
-                    </span>
-                  </div>
-                  <div style={s.fundDiv} />
-                  <div style={s.fundRow}>
-                    <span style={s.fundLabelSmall}>입금 예정</span>
-                    <span style={{ ...s.fundValueSmall, color: "#84cc16" }}>+{fmtAmount(monthUpcomingDep)}</span>
-                  </div>
-                  <div style={s.fundRow}>
-                    <span style={s.fundLabelSmall}>출금 예정</span>
-                    <span style={{ ...s.fundValueSmall, color: "#f97316" }}>−{fmtAmount(monthUpcomingWd)}</span>
-                  </div>
-                  <div style={s.fundMissionBar}>
-                    <div style={s.fundMissionLabel}>6/15 미션 {missionPct.toFixed(0)}% · {fmtAmount(missionTarget - monthDep)} 남음</div>
-                    <div style={s.fundMissionBarBg}>
-                      <div style={{ ...s.fundMissionBarFill, width: `${missionPct}%` }} />
+
+                <div className="hero-secondary">
+                  {alerts.length === 0 ? (
+                    <div style={{ color: "var(--ink-mute)", fontStyle: "italic", fontFamily: "var(--serif)", fontSize: 13 }}>
+                      D-7 ì´ë‚´ ë‹¤ë¥¸ ì•ˆê±´ ì—†ìŒ
                     </div>
-                  </div>
+                  ) : (
+                    alerts.map((a, i) => {
+                      const tag = tagForPriority(a.priority);
+                      const dd = calcDDay(a.deadline);
+                      return (
+                        <div className="alert-item" key={a.id}>
+                          <span className="alert-marker">{["i.", "ii.", "iii."][i]}</span>
+                          <div className="alert-content">
+                            <div className="alert-title">
+                              {a.title}
+                              <span className={`alert-tag ${tag.cls}`}>{tag.label}</span>
+                            </div>
+                            <div className="alert-sub">
+                              {a.nextAction
+                                ? `${a.nextAction} Â· D${dd >= 0 ? "-" : "+"}${Math.abs(dd)}`
+                                : `D${dd >= 0 ? "-" : "+"}${Math.abs(dd)} Â· ${a.category || ""}`}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </section>
+            )}
+
+            {/* â”â”â” KPI â”â”â” */}
+            <div className="section-rule">
+              <span className="section-rule-num">I.</span>
+              <span className="section-rule-title">
+                ì´ë²ˆ ì£¼ <em>í•µì‹¬ ì§€í‘œ</em>
+              </span>
+              <span className="section-rule-line"></span>
+              <span className="section-rule-meta">W{currentWeek}</span>
             </div>
- 
-            <footer style={s.footer}>
-              📡 앙투어솔레 CEO SAAS · {new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 갱신
-            </footer>
+
+            <section className="kpi-grid">
+              <div className="kpi">
+                <div>
+                  <div className="kpi-label">
+                    ì´ë²ˆ ì£¼ ìž…ê¸ˆ <span className="kpi-period">W{currentWeek}</span>
+                  </div>
+                  <div className="kpi-value">
+                    {fmtMM(weeklyInflow)}
+                    <span className="kpi-value-unit">ë°±ë§Œì›</span>
+                  </div>
+                </div>
+                <div className="kpi-context">
+                  {thisWeekPayments.filter((p) => p.type === "ìž…ê¸ˆ").length}ê±´ ì˜ˆì •Â·ì‹¤ìˆ˜ë ¹
+                </div>
+              </div>
+
+              <div className="kpi">
+                <div>
+                  <div className="kpi-label">
+                    ì´ë²ˆ ì£¼ ì¶œê¸ˆ <span className="kpi-period">W{currentWeek}</span>
+                  </div>
+                  <div className="kpi-value">
+                    {fmtMM(weeklyOutflow)}
+                    <span className="kpi-value-unit">ë°±ë§Œì›</span>
+                  </div>
+                </div>
+                <div className="kpi-context">
+                  {thisWeekPayments.filter((p) => p.type === "ì¶œê¸ˆ").length}ê±´ ê²°ì œÂ·ìžë™ì´ì²´
+                </div>
+              </div>
+
+              <div className="kpi">
+                <div>
+                  <div className="kpi-label">
+                    ì§„í–‰ í”„ë¡œì íŠ¸ <span className="kpi-period">í˜„ìž¬</span>
+                  </div>
+                  <div className="kpi-value">
+                    {activeProjectsCount}
+                    <span className="kpi-value-unit">ê±´</span>
+                  </div>
+                </div>
+                <div className="kpi-context">ì§„í–‰ ì¤‘ + ê²€í†  ì¤‘ í•©ì‚°</div>
+              </div>
+
+              <div className="kpi">
+                <div>
+                  <div className="kpi-label">
+                    ì˜¤ëŠ˜ì˜ í•  ì¼ <span className="kpi-period">ë¯¸ì™„ë£Œ</span>
+                  </div>
+                  <div className="kpi-value">
+                    {todayTaskCount}
+                    <span className="kpi-value-unit">ê±´</span>
+                  </div>
+                </div>
+                <div className="kpi-context">CEO í™”ë©´ ê¸°ì¤€ (ì§ì› ë‹´ë‹¹ ì œì™¸)</div>
+              </div>
+            </section>
+
+            {/* â”â”â” PROJECT BOARD â”â”â” */}
+            <div className="section-rule">
+              <span className="section-rule-num">II.</span>
+              <span className="section-rule-title">
+                ì§„í–‰ ì¤‘ <em>í”„ë¡œì íŠ¸</em>
+              </span>
+              <span className="section-rule-line"></span>
+              <span className="section-rule-meta">
+                {topProjects.length} OF {projects.filter((p) => p.status !== "ì™„ë£Œ").length}
+              </span>
+            </div>
+
+            <section className="project-board">
+              {topProjects.length === 0 ? (
+                <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--ink-mute)", fontStyle: "italic", fontFamily: "var(--serif)" }}>
+                  ì§„í–‰ ì¤‘ì¸ í”„ë¡œì íŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤
+                </div>
+              ) : (
+                topProjects.map((p) => {
+                  const dd = p.deadline ? calcDDay(p.deadline) : null;
+                  return (
+                    <article className="project-card" key={p.id}>
+                      <div className="project-head">
+                        <h3 className="project-title">{p.title}</h3>
+                        <span className={`project-status ${statusClass(p.status)}`}>
+                          {statusLabel(p.status)}
+                        </span>
+                      </div>
+                      <div className="project-next">
+                        <b>Next.</b> {p.nextAction || p.progress || "ë‹¤ìŒ ì•¡ì…˜ì„ ì •í•´ì£¼ì„¸ìš”"}
+                      </div>
+                      <div className="project-meta">
+                        <span>{p.vendor || p.category || "â€”"}</span>
+                        {dd !== null && (
+                          <span className={`project-due ${dd <= 7 ? "imminent" : ""}`}>
+                            {dd >= 0 ? `D-${dd}` : `D+${Math.abs(dd)}`}
+                          </span>
+                        )}
+                      </div>
+                      <div className="project-progress">
+                        <div
+                          className="project-progress-fill"
+                          style={{ width: `${projectProgress(p)}%`, background: progressBg(p) }}
+                        ></div>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </section>
+
+            {/* â”â”â” CFOR 12W â”â”â” */}
+            <div className="section-rule">
+              <span className="section-rule-num">III.</span>
+              <span className="section-rule-title">
+                12ì£¼ <em>ìºì‹œí”Œë¡œìš° ì˜ˆì¸¡</em>
+              </span>
+              <span className="section-rule-line"></span>
+              <span className="section-rule-meta">
+                W{currentWeek}â€“W{currentWeek + 11}
+              </span>
+            </div>
+
+            <section className="cfor-strip">
+              <div className="cfor-label">
+                <small>Net Weekly</small>
+                í˜„ê¸ˆ íë¦„ ì¶”ì´
+              </div>
+              <div className="cfor-weeks">
+                {cforWeeks.map((w, i) => (
+                  <div
+                    key={i}
+                    className={`week-bar ${w.net >= 0 ? "positive" : "negative"} ${w.isCurrent ? "current" : ""}`}
+                    style={{ height: `${w.height}px` }}
+                    title={`W${w.weekNum}: ${w.net >= 0 ? "+" : ""}${fmtMM(w.net)}MM`}
+                  ></div>
+                ))}
+              </div>
+              <div className="cfor-summary">
+                <div className="cfor-summary-big">
+                  {cfor12wTotal >= 0 ? "+ " : "âˆ’ "}
+                  {fmtMM(Math.abs(cfor12wTotal * 1000000))} MM
+                </div>
+                <div className="cfor-summary-small">12W net projection</div>
+              </div>
+            </section>
+
+            {/* â”â”â” FOOTER â”â”â” */}
+            <section className="footer-grid">
+              <div className="footer-block">
+                <div className="footer-title">â€” ì˜¤ëŠ˜ì˜ ê¸´ê¸‰ í•  ì¼</div>
+                {todayQuickTasks.length === 0 ? (
+                  <div style={{ color: "var(--ink-mute)", fontStyle: "italic", fontSize: 13, padding: "10px 0" }}>
+                    ðŸ”´ ê¸´ê¸‰ ìš°ì„ ìˆœìœ„ í•  ì¼ì´ ì—†ìŠµë‹ˆë‹¤.
+                  </div>
+                ) : (
+                  todayQuickTasks.map((t) => (
+                    <div className="quick-item" key={t.id}>
+                      <span className={`quick-check ${t.status === "ì™„ë£Œ" ? "done" : ""}`}>
+                        {t.status === "ì™„ë£Œ" ? "âœ“" : ""}
+                      </span>
+                      <span className={`quick-text ${t.status === "ì™„ë£Œ" ? "done" : ""}`}>{t.title}</span>
+                      <span className="quick-cat">{t.category || ""}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="footer-block">
+                <div className="footer-title">â€” ì´ë²ˆ ì£¼ ë©”ëª¨</div>
+                <div className="insight-card">
+                  <div className="insight-label">Weekly Note</div>
+                  <p className="insight-text">
+                    ì´ ì˜ì—­ì—ëŠ” ë§¤ì£¼ ë³¸ì¸ì´ ì§ì ‘ ì ëŠ” <strong>ì´ë²ˆ ì£¼ ì¸ì‚¬ì´íŠ¸Â·ê´€ì°°</strong>ì´ ë“¤ì–´ê°ˆ ìžë¦¬ìž…ë‹ˆë‹¤.
+                    ì¶”í›„ ë…¸ì…˜ íŽ˜ì´ì§€ì™€ ì—°ê²°í•˜ì‹¤ ìˆ˜ ìžˆë„ë¡ ë³„ë„ ì•ˆë‚´ë“œë¦´ê²Œìš”.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <div className="colophon">
+              <div className="colophon-rule">â€” FIN â€”</div>
+              An TÃºr Solais Â· ê¹€ë¯¼ìž¬ ëŒ€í‘œ Â· ë§¤ì¼ ì•„ì¹¨ 6ì‹œ ìžë™ ê°±ì‹ 
+            </div>
           </>
         )}
- 
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        {/* 모달 — 새 일정 / 업무 수정 / 빠른 메모                          */}
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        {modal === "add-payment" && (
-          <div style={s.modalOverlay} onClick={() => setModal(null)}>
-            <div style={s.modal} onClick={e => e.stopPropagation()}>
-              <h2 style={s.modalTitle}>📅 새 일정 추가 — {modalData.date}</h2>
-              <div style={s.modalForm}>
-                <label style={s.modalLabel}>제목 *</label>
-                <input type="text" value={modalData.title || ""} onChange={e => setModalData({ ...modalData, title: e.target.value })} style={s.modalInput} placeholder="예: 자사몰 정산, 소원상사 결제 등" />
-                <label style={s.modalLabel}>입출 구분</label>
-                <select value={modalData.type || "출금"} onChange={e => setModalData({ ...modalData, type: e.target.value })} style={s.modalInput}>
-                  <option value="입금">💵 입금</option>
-                  <option value="출금">💸 출금</option>
-                </select>
-                <label style={s.modalLabel}>금액 (원)</label>
-                <input type="number" value={modalData.amount || ""} onChange={e => setModalData({ ...modalData, amount: e.target.value })} style={s.modalInput} placeholder="예: 10000000" />
-                <label style={s.modalLabel}>거래처</label>
-                <input type="text" value={modalData.vendor || ""} onChange={e => setModalData({ ...modalData, vendor: e.target.value })} style={s.modalInput} placeholder="예: 자사몰, 소원상사" />
-                <label style={s.modalLabel}>결제 유형</label>
-                <select value={modalData.category || ""} onChange={e => setModalData({ ...modalData, category: e.target.value })} style={s.modalInput}>
-                  <option value="">선택 안함</option>
-                  <option value="정기-고정">정기-고정</option>
-                  <option value="정기-변동">정기-변동</option>
-                  <option value="변동-건별">변동-건별</option>
-                  <option value="대출 상환">대출 상환</option>
-                  <option value="매출 정산">매출 정산</option>
-                  <option value="임대료·관리비">임대료·관리비</option>
-                </select>
-                <label style={s.modalLabel}>비고</label>
-                <textarea value={modalData.memo || ""} onChange={e => setModalData({ ...modalData, memo: e.target.value })} style={{ ...s.modalInput, minHeight: 60, fontFamily: "inherit" }} placeholder="추가 메모..." />
-              </div>
-              <div style={s.modalBtns}>
-                <button onClick={() => setModal(null)} style={s.modalBtnSecondary}>취소</button>
-                <button onClick={submitAddPayment} disabled={submitting} style={{ ...s.modalBtnPrimary, opacity: submitting ? 0.5 : 1 }}>
-                  {submitting ? "저장 중..." : "📌 노션에 저장"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
- 
-        {modal === "edit-project" && (
-          <div style={s.modalOverlay} onClick={() => setModal(null)}>
-            <div style={s.modal} onClick={e => e.stopPropagation()}>
-              <h2 style={s.modalTitle}>{modalData.title}</h2>
-              <div style={s.modalForm}>
-                <label style={s.modalLabel}>상태</label>
-                <select value={modalData.status || ""} onChange={e => setModalData({ ...modalData, status: e.target.value })} style={s.modalInput}>
-                  <option value="진행 중">진행 중</option>
-                  <option value="검토 중">검토 중</option>
-                  <option value="대기 중">대기 중</option>
-                  <option value="완료">완료</option>
-                  <option value="보류">보류</option>
-                </select>
-                <label style={s.modalLabel}>우선순위</label>
-                <select value={modalData.priority || ""} onChange={e => setModalData({ ...modalData, priority: e.target.value })} style={s.modalInput}>
-                  <option value="🔴 즉시">🔴 즉시</option>
-                  <option value="🟠 이번주">🟠 이번주</option>
-                  <option value="🟡 이번달">🟡 이번달</option>
-                  <option value="⚪ 추적">⚪ 추적</option>
-                </select>
-                <label style={s.modalLabel}>다음 액션</label>
-                <textarea value={modalData.nextAction || ""} onChange={e => setModalData({ ...modalData, nextAction: e.target.value })} style={{ ...s.modalInput, minHeight: 60, fontFamily: "inherit" }} placeholder="다음에 할 일..." />
-                <label style={s.modalLabel}>진행 사항 (긴 메모)</label>
-                <textarea value={modalData.progress || ""} onChange={e => setModalData({ ...modalData, progress: e.target.value })} style={{ ...s.modalInput, minHeight: 100, fontFamily: "inherit" }} placeholder="진행 상황·미팅 메모·결정 사항..." />
-                {modalData.url && <a href={modalData.url} target="_blank" rel="noreferrer" style={s.modalLink}>📓 노션에서 열기</a>}
-              </div>
-              <div style={s.modalBtns}>
-                <button onClick={() => setModal(null)} style={s.modalBtnSecondary}>취소</button>
-                <button onClick={submitEditProject} disabled={submitting} style={{ ...s.modalBtnPrimary, opacity: submitting ? 0.5 : 1 }}>
-                  {submitting ? "저장 중..." : "💾 저장"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
- 
-        {modal === "memo" && (
-          <div style={s.modalOverlay} onClick={() => setModal(null)}>
-            <div style={s.modal} onClick={e => e.stopPropagation()}>
-              <h2 style={s.modalTitle}>📝 빠른 메모 — 노션 CEO SAAS에 저장</h2>
-              <div style={s.modalForm}>
-                <label style={s.modalLabel}>제목 (선택)</label>
-                <input type="text" placeholder="제목 (생략 가능)" value={logTitle} onChange={e => setLogTitle(e.target.value)} style={s.modalInput} />
-                <label style={s.modalLabel}>내용</label>
-                <textarea placeholder="미팅 내용·진행 사항·결정 사항·아이디어..." value={logContent} onChange={e => setLogContent(e.target.value)} style={{ ...s.modalInput, minHeight: 160, fontFamily: "inherit" }} autoFocus />
-                {logFeedback && <div style={s.logFeedback}>{logFeedback}</div>}
-              </div>
-              <div style={s.modalBtns}>
-                <button onClick={() => setModal(null)} style={s.modalBtnSecondary}>취소</button>
-                <button onClick={submitLog} disabled={logSubmitting || !logContent.trim()} style={{ ...s.modalBtnPrimary, opacity: logSubmitting || !logContent.trim() ? 0.5 : 1 }}>
-                  {logSubmitting ? "저장 중..." : "📌 노션 기록"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
+    </>
   );
 }
- 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// V6 스타일 — 인지과학 4단계 위계 / 노트북 가로 폭 활용 / 3색 시스템
-// 위계: 18(L1 타이틀) · 14(L2 섹션) · 12(L3 본문) · 10(L4 메타)
-// 색상: 빨강(위험·출금) / 초록(안전·입금) / 파랑(정보) / 회색(중립)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const s = {
-  container: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif", backgroundColor: "#f1f5f9", minHeight: "100vh", padding: 16 },
-  inner: { maxWidth: 2200, margin: "0 auto" },
- 
-  // 헤더 — 슬림, 좌우 분리
-  topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 8px", gap: 10 },
-  topbarLeft: { display: "flex", alignItems: "baseline", gap: 12, minWidth: 0 },
-  topbarRight: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
-  title: { fontSize: 18, fontWeight: 800, margin: 0, color: "#0f172a", letterSpacing: "-0.02em", whiteSpace: "nowrap" },
-  date: { fontSize: 12, color: "#64748b", fontWeight: 500, whiteSpace: "nowrap" },
-  searchBox: { position: "relative", width: 280 },
-  searchInput: { width: "100%", padding: "7px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, backgroundColor: "#fff", outline: "none", fontFamily: "inherit", boxSizing: "border-box" },
-  searchCount: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 6px", borderRadius: 6, fontWeight: 600 },
-  iconBtn: { width: 36, height: 36, borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", cursor: "pointer", fontSize: 16, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
- 
-  // V6.5: 가로 분할 부활 — 좌(🔥 오늘 1.7fr) + 우(📅 캘린더 1fr)
-  row1: { display: "grid", gridTemplateColumns: "minmax(0, 2.2fr) minmax(0, 1fr)", gap: 14, marginBottom: 14, alignItems: "stretch" },
-  row1Left: { display: "flex", flexDirection: "column", minHeight: 0 },
-  row1Right: { display: "flex", flexDirection: "column", minHeight: 0 },
- 
-  // Hero 오늘 박스 — 본인이 가장 먼저 보는 곳, 색상 강도 최고
-  heroToday: { background: "linear-gradient(135deg, #dc2626 0%, #f97316 100%)", borderRadius: 14, padding: "14px 16px", color: "#fff", boxShadow: "0 6px 20px rgba(220,38,38,0.25)", boxSizing: "border-box", height: "100%", display: "flex", flexDirection: "column" },
-  heroHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.2)", flexWrap: "wrap", gap: 8 },
-  heroTitle: { fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 2 },
-  heroSubtitle: { fontSize: 12, opacity: 0.95, fontWeight: 500, lineHeight: 1.5 },
-  heroDday: { fontSize: 11, fontWeight: 700, background: "rgba(255,255,255,0.2)", padding: "4px 10px", borderRadius: 10, whiteSpace: "nowrap" },
-  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 0.85fr) minmax(0, 2fr) minmax(0, 0.85fr)", gap: 10, flex: 1 },
-  heroCol: { background: "#ffffff", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", color: "#1f2937", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", minHeight: 0 },
-  heroColTitle: { fontSize: 11.5, fontWeight: 800, marginBottom: 8, paddingBottom: 6, borderBottom: "2px solid #f1f5f9", letterSpacing: "-0.01em", color: "#0f172a" },
-  heroItem: { fontSize: 11.5, marginBottom: 4, lineHeight: 1.45, padding: "6px 9px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 6 },
-  heroItemRow: { display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" },
-  heroAmt: { fontWeight: 800, flexShrink: 0, fontSize: 13 },
-  heroPriority: { fontSize: 11, flexShrink: 0 },
-  heroItemTitle: { fontWeight: 600, flex: 1, minWidth: 0, wordBreak: "keep-all", color: "#0f172a" },
-  heroSub: { fontSize: 11, color: "#64748b", marginTop: 4, fontWeight: 500 },
-  heroEmpty: { fontSize: 12, color: "#94a3b8", textAlign: "center", padding: "24px 0", fontStyle: "italic" },
- 
-  // V6.3 신규 — 카테고리 그룹핑 + 체크박스 + 칩 + 시간 배지
-  heroCategorySection: { marginBottom: 8 },
-  heroCategoryHeader: { fontSize: 11, fontWeight: 800, color: "#1e293b", marginBottom: 5, padding: "4px 9px", background: "#f1f5f9", borderLeft: "3px solid #f97316", borderRadius: "3px 5px 5px 3px", letterSpacing: "-0.01em" },
-  heroCategoryGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 },
-  heroTaskItem: { display: "flex", gap: 6, marginBottom: 0, alignItems: "flex-start", padding: "6px 8px", background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 6, transition: "all 0.15s ease" },
-  heroCheckbox: { width: 16, height: 16, cursor: "pointer", accentColor: "#dc2626", flexShrink: 0, marginTop: 1 },
-  heroTaskBody: { flex: 1, minWidth: 0 },
-  heroTaskTopRow: { display: "flex", gap: 5, alignItems: "baseline", flexWrap: "wrap", lineHeight: 1.4 },
-  heroTimeBadge: { fontSize: 10, fontWeight: 800, background: "#1e40af", color: "#fff", padding: "2px 8px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.02em" },
-  heroTaskTitle: { fontSize: 11.5, fontWeight: 600, wordBreak: "keep-all", flex: 1, minWidth: 0, color: "#0f172a", lineHeight: 1.35 },
-  heroChipRow: { display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" },
-  heroChip: { fontSize: 10, fontWeight: 700, color: "#fff", padding: "2.5px 8px", borderRadius: 4, letterSpacing: "0.01em", lineHeight: 1.3 },
-  heroSubMeta: { fontSize: 11, color: "#64748b", marginTop: 5, fontWeight: 500 },
- 
-  // 캘린더 — 한 눈에 5월 전체
-  calendarSection: { backgroundColor: "#fff", borderRadius: 12, padding: "14px 16px 10px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", boxSizing: "border-box", display: "flex", flexDirection: "column", height: "100%", width: "100%" },
-  calendarBig: { padding: "2px 0", flex: 1, display: "flex", flexDirection: "column" },
-  calendarHeader: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 },
-  calendarDay: { fontSize: 10, fontWeight: 700, color: "#64748b", textAlign: "center", padding: 3 },
-  calendarGridBig: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, flex: 1, gridAutoRows: "1fr" },
-  calendarCellBig: { minHeight: 88, padding: "5px 6px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, display: "flex", flexDirection: "column", gap: 2, transition: "all 0.15s ease", overflow: "hidden" },
-  calendarDayNum: { fontSize: 11, fontWeight: 600, marginBottom: 1 },
-  calendarEvents: { display: "flex", flexDirection: "column", gap: 1.5 },
-  calendarEvent: { fontSize: 9, padding: "1px 4px", borderRadius: 3, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
-  calendarMore: { fontSize: 9, color: "#94a3b8", fontWeight: 600, textAlign: "center", padding: "1px 0" },
-  calendarHint: { fontSize: 10, color: "#94a3b8", fontWeight: 500 },
- 
-  // 공통 섹션 (진행 업무 등)
-  section: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 14px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 10 },
-  sectionHeaderSlim: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #f1f5f9" },
-  sectionTitleSmall: { fontSize: 13, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 },
-  sectionCount: { fontSize: 10, fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "1px 7px", borderRadius: 8 },
- 
-  // 진행 업무 — 3열 그리드, 카드 컴팩트
-  projectGridV6: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: "2px 0 4px" },
-  projectCard: { padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, backgroundColor: "#fff", cursor: "pointer", transition: "all 0.15s ease" },
-  projectHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6 },
-  projectTitle: { fontSize: 12, fontWeight: 700, color: "#0f172a", lineHeight: 1.3, flex: 1 },
-  projectPriority: { fontSize: 10, fontWeight: 700, flexShrink: 0 },
-  projectBadges: { display: "flex", gap: 5, marginBottom: 6, flexWrap: "wrap" },
-  projectBadge: { fontSize: 9, fontWeight: 700, color: "#fff", padding: "2px 7px", borderRadius: 9 },
-  projectStatus: { fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 9, border: "1px solid", backgroundColor: "#fff" },
-  projectNext: { fontSize: 11, color: "#475569", lineHeight: 1.4 },
- 
-  // 3단 — 4박스 가로 분할
-  row3: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10, alignItems: "stretch" },
-  bucketBox: { backgroundColor: "#fff", borderRadius: 12, padding: "10px 12px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", minHeight: 0 },
-  bucketHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, paddingBottom: 5, borderBottom: "1px solid #f1f5f9" },
-  bucketTitle: { fontSize: 12, fontWeight: 700, color: "#0f172a", display: "flex", alignItems: "center", gap: 5, minWidth: 0 },
-  bucketDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
-  bucketTitleText: { whiteSpace: "nowrap" },
-  bucketCount: { fontSize: 10, fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "1px 6px", borderRadius: 8 },
-  bucketSummary: { display: "flex", gap: 5, fontSize: 10, fontWeight: 700, flexShrink: 0 },
-  bucketList: { display: "flex", flexDirection: "column", flex: 1 },
-  bucketEmpty: { textAlign: "center", padding: "16px 4px", color: "#94a3b8", fontSize: 11, fontStyle: "italic" },
- 
-  // 압축형 항목 (V6) — 한 줄에 빽빽이
-  itemCompact: { display: "flex", alignItems: "center", gap: 6, padding: "5px 4px 5px 6px", borderBottom: "1px solid #f8fafc" },
-  checkbox: { width: 14, height: 14, cursor: "pointer", accentColor: "#3b82f6", flexShrink: 0 },
-  itemCompactIcon: { fontSize: 14, width: 18, flexShrink: 0, textAlign: "center" },
-  itemCompactMain: { flex: 1, minWidth: 0 },
-  itemCompactTitle: { fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 },
-  itemCompactMeta: { fontSize: 10, color: "#64748b", display: "flex", gap: 3, alignItems: "center", flexWrap: "nowrap", overflow: "hidden" },
-  itemDot: { color: "#cbd5e1" },
-  itemCompactAmount: { fontSize: 11, fontWeight: 700, flexShrink: 0, textAlign: "right", letterSpacing: "-0.01em" },
- 
-  // 자금 박스 (3단 우측)
-  fundList: { display: "flex", flexDirection: "column", gap: 6, padding: "4px 0" },
-  fundRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline" },
-  fundLabel: { fontSize: 11, color: "#64748b", fontWeight: 600 },
-  fundValue: { fontSize: 13, fontWeight: 800, letterSpacing: "-0.01em" },
-  fundLabelSmall: { fontSize: 10, color: "#94a3b8", fontWeight: 500 },
-  fundValueSmall: { fontSize: 11, fontWeight: 700 },
-  fundDiv: { height: 1, backgroundColor: "#f1f5f9", margin: "2px 0" },
-  fundMissionBar: { marginTop: 6, padding: "8px 10px", backgroundColor: "#eff6ff", borderRadius: 6, border: "1px solid #dbeafe" },
-  fundMissionLabel: { fontSize: 10, fontWeight: 700, color: "#1e40af", marginBottom: 5 },
-  fundMissionBarBg: { height: 6, backgroundColor: "#dbeafe", borderRadius: 3, overflow: "hidden" },
-  fundMissionBarFill: { height: "100%", background: "linear-gradient(90deg, #3b82f6 0%, #1e40af 100%)", borderRadius: 3, transition: "width 0.5s ease" },
- 
-  emptyState: { textAlign: "center", padding: "16px 8px", color: "#94a3b8", fontSize: 12 },
- 
-  // 모달
-  modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 },
-  modal: { backgroundColor: "#fff", borderRadius: 16, padding: "24px 24px 20px", width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" },
-  modalTitle: { fontSize: 17, fontWeight: 800, margin: "0 0 16px", color: "#0f172a", letterSpacing: "-0.02em" },
-  modalForm: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 },
-  modalLabel: { fontSize: 12, fontWeight: 700, color: "#475569", marginTop: 8, marginBottom: 4 },
-  modalInput: { padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", width: "100%" },
-  modalLink: { fontSize: 12, color: "#3b82f6", marginTop: 12, textDecoration: "none", fontWeight: 600 },
-  modalBtns: { display: "flex", gap: 8, justifyContent: "flex-end" },
-  modalBtnSecondary: { padding: "9px 16px", borderRadius: 8, border: "1px solid #e2e8f0", backgroundColor: "#fff", color: "#475569", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
-  modalBtnPrimary: { padding: "9px 16px", borderRadius: 8, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
- 
-  loading: { textAlign: "center", padding: 60, color: "#64748b", fontSize: 14 },
-  error: { backgroundColor: "#fee2e2", border: "1px solid #fca5a5", color: "#b91c1c", padding: 16, borderRadius: 10, marginBottom: 16, fontSize: 13 },
-  logFeedback: { fontSize: 12, color: "#10b981", textAlign: "center", padding: "6px 0", fontWeight: 600 },
-  footer: { marginTop: 12, paddingTop: 10, textAlign: "center", color: "#94a3b8", fontSize: 10 },
-};
+
